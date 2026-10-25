@@ -1,0 +1,8 @@
+bin/
+obj/
+publish/
+*.user
+*.suo
+.vs/
+/TLD_ModBlueprintFinder/bin
+/TLD_ModBlueprintFinder/obj
