@@ -188,8 +188,8 @@ public sealed class BlueprintIndex
             var score = 0;
 
             // 去掉 GEAR_/LIQUID_/POWDER_ 前缀后比较，玩家往往只记得裸名字
-            var bare = StripPrefix(id);
-            var bareQuery = StripPrefix(q);
+            var bare = ItemIds.StripPrefix(id);
+            var bareQuery = ItemIds.StripPrefix(q);
 
             if (bare.Equals(bareQuery, StringComparison.OrdinalIgnoreCase)) score += 100;
             else if (bare.StartsWith(bareQuery, StringComparison.OrdinalIgnoreCase)) score += 60;
@@ -210,17 +210,6 @@ public sealed class BlueprintIndex
             .Take(max)
             .Select(x => x.Id)
             .ToList();
-    }
-
-    private static string StripPrefix(string id)
-    {
-        foreach (var prefix in new[] { "GEAR_", "LIQUID_", "POWDER_", "TOOL_", "REC_" })
-        {
-            if (id.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                return id.Substring(prefix.Length);
-        }
-
-        return id;
     }
 
     private static int Levenshtein(string a, string b)

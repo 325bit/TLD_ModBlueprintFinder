@@ -1,10 +1,6 @@
 # 漫漫长夜mod配方搜索器 · TLD Mod Blueprint Finder
 
-输入一个mod物品 ID，查找它的合成关系：原料、产品和工具
-
-*A read-only blueprint lookup tool for modded The Long Dark*
-
-![version](https://img.shields.io/badge/version-1.1.0-informational)
+![version](https://img.shields.io/badge/version-1.2.0-informational)
 
 ![game](https://img.shields.io/badge/The%20Long%20Dark-2.55-success)
 
@@ -14,23 +10,14 @@
 
 ---
 
-**步骤**
-
-1. 下载 `TLD_ModBlueprintFinder.exe`（约 260 KB）
-2. 放到任意位置，双击运行。免安装，不写注册表，不建后台服务
-3. 首次启动会自动寻找游戏目录；找不到就点「浏览…」，选到 `...\steamapps\common\TheLongDark` 这一层
-
-**卸载**：删掉 exe 就行。唯一的残留是 `%APPDATA%\TLD_ModBlueprintFinder\settings.json`（只记上次选的路径），一并删除即可。
-
 ## 使用
 
 1. 确认顶部路径指向游戏根目录（里面要有 `Mods` 文件夹），点「扫描 Mods」  
    —— 之后每次启动会自动沿用上次的路径并直接扫描，不用重复点
-2. 在「物品 ID」里输入，按回车（例如 `GEAR_Hammer`、`GEAR_ScrapMetal`）
-3. 三个分页就是上面那三组结果；点任意一行，右侧显示这份配方的完整原料清单和原始数据
-4. 双击一行复制它的摘要；「导出 CSV」把当前分页的结果存成表格
-
-**输入不用打全**，也**不用管大小写**（`gear_hammer` 一样能查）：
+2. 在「物品 ID」里输入，按回车（例如 `GEAR_Hammer`、`GEAR_ScrapMetal`、`GEAR_metallighter`）
+3. 四个分页就是四组结果：**作为产物 / 作为原料 / 作为工具 / 物品定义**。点任意一行，  
+   右侧显示完整原料清单、制作条件和原始数据
+4. 双击一行复制它的摘要；「导出 CSV」把当前结果存成表格
 
 | 匹配方式 | 行为                                               |
 | ---- | ------------------------------------------------ |
@@ -38,29 +25,39 @@
 | 仅精确  | 只认完全相同的 ID                                       |
 | 模糊   | ID 里含这段字符就列出                                     |
 
+## 物品定义
+
+第四个分页是**这个物品的 JSON定义文件**。这些文件放在 modcomponent 的 `auto-mapped/` 文件夹里（`notes/`、`collectibles/`、`ClothingItems/` 里也放同格式的定义）。
+
+**「判定依据」列说明这个 ID 是怎么认定的**，因为定义文件里只写文件名、不写物品 ID：
+
+| 判定依据       | 意思                        |
+| ---------- | ------------------------- |
+| 同 mod 配方引用 | 这个 mod 自己的配方里出现过这个 ID，最可信 |
+| 其他 mod 引用  | 别的 mod 的配方引用了它，通常也是同一件物品  |
+| 仅文件名       | 没有任何配方引用过，只按文件名对上，前缀不确定   |
+
+大小写也当回事：`GEAR_sugara`（某个 mod 加的糖）和 `GEAR_SugarA`（原版糖）去掉前缀后都是 `sugara`。  
+工具优先挑大小写完全一致的，不一致时会在「判定依据」里标一句「大小写不同」。
+
 ## 界面
 
-<table align="center">  
-  <tr>  
-    <td align="center"><img src="docs/img/screenshot-ingredient.png" alt="作为原料"></td>  
-    <td align="center"><img src="docs/img/screenshot-tool.png" alt="作为工具"></td>  
-  </tr>  
-  <tr>  
-    <td align="center"><code>GEAR_ScrapMetal</code>：28 个配方会消耗它</td>  
-    <td align="center"><code>GEAR_Hammer</code>：26 个配方拿它当工具</td>  
-  </tr>  
+<table align="center">      
+  <tr>      
+    <td align="center"><img src="docs/img/screenshot-ingredient.png" alt="作为原料"></td>      
+    <td align="center"><img src="docs/img/screenshot-tool.png" alt="作为工具"></td>      
+  </tr>      
+  <tr>      
+    <td align="center"><code>GEAR_ScrapMetal</code>：28 个配方会消耗它</td>      
+    <td align="center"><code>GEAR_Hammer</code>：26 个配方拿它当工具</td>      
+  </tr>      
+  <tr>      
+    <td align="center" colspan="2"><img src="docs/img/screenshot-definition.png" alt="物品定义"></td>      
+  </tr>      
+  <tr>      
+    <td align="center" colspan="2"><code>GEAR_metallighter</code>：右侧直接贴出它在 <code>auto-mapped/</code> 里的 JSON</td>      
+  </tr>      
 </table>
-
-## 常见问题
-
-**查不到某个物品的配方？**
-
-按这三种情况对照一下：
-
-1. **原版物品**：游戏本体的配方是游戏资产，不在任何 mod 文件里。所以查 `GEAR_Knife` 这类原版物品可能显示「无匹配」——  
-   这是预期行为，不是工具坏了。本工具只负责 **mod 添加的配方**。
-2. **DLL 型 mod**：只提供 dll、不提供配方文件的 mod 不会出现在结果里。
-3. **路径选错了**：没指到含 `Mods` 的那一层。工具会告诉你扫到几个容器、几条蓝图，数字是 0 就是路径的问题。
 
 ## 许可证
 

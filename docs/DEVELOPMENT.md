@@ -3,17 +3,19 @@
 > 玩家向的安装与使用说明见 [../README.md](../README.md)。
 > 本文件写给要改代码或要做二次开发的人：数据格式、字段映射、分层设计、踩过的坑。
 
-针对《漫漫长夜》(The Long Dark) + ModComponent 生态的只读检索工具：**输入一个物品 ID，双向列出「怎么做出它」和「它能用来做什么」。**
+针对《漫漫长夜》(The Long Dark) + ModComponent 生态的只读检索工具：**输入一个物品 ID，双向列出「怎么做出它」「它能用来做什么」，并贴出它自己的 JSON 定义。**
 
-装了四十多个 modcomponent 之后，想知道 `GEAR_ScrapMetal` 到底能做什么，只能一个个 zip 解压翻 JSON。这个工具做掉这件事，并给出三组互不混淆的答案：
+装了四十多个 modcomponent 之后，想知道 `GEAR_ScrapMetal` 到底能做什么，只能一个个 zip 解压翻 JSON。这个工具做掉这件事，并给出四组互不混淆的答案：
 
 | 结果分组 | 含义 | 匹配字段 |
 | --- | --- | --- |
 | ① 作为产物 | 制作**这个物品**需要哪些蓝图 | `CraftedResult` |
 | ② 作为原料 | **这个物品**被哪些蓝图消耗 | `RequiredGear[].Item` / `RequiredPowder[].Powder` / `RequiredLiquid[].Liquid` |
 | ③ 作为工具 | 哪些蓝图需要 / 可以使用**这个物品**当作工具 | `RequiredTool` / `OptionalTools` / `AllowedCookingPots` |
+| ④ 物品定义 | 这个物品**本身**的参数（重量 / 腐坏 / 堆叠 / 可燃…） | `auto-mapped/<内部名>.json` 的文件名，见 §3 末 |
 
 工具与原料**刻意分开**：工具不会被扣掉，混进原料列表会让玩家误以为要消耗一把锤子。
+前三组是「配方」，第四组是「物品定义」——两套数据来自不同目录，互不推导，所以**有配方没定义、有定义没配方都是常态**。
 
 ---
 
@@ -31,13 +33,17 @@ AHandyToolbox.modcomponent  (ZIP)
 │   └── AcornShelled.json
 ├── recipes/                    ← 烹饪食谱，蓝图嵌在 BlueprintData 里
 │   └── bonebroth.json
-├── auto-mapped/                ← prefab 自动映射（与配方无关）
+├── auto-mapped/                ← 物品定义：预制体的组件参数（重量 / 腐坏 / 堆叠…）
 ├── gear-spawns/                ← 物品生成点（与配方无关）
 ├── localizations/              ← 本地化文本
 └── bundle/                     ← 资产包
 ```
 
-**只有 `blueprints/` 与 `recipes/` 参与索引**，其余目录直接跳过。
+**收进索引的只有三类**：`blueprints/`、`recipes/`（构成配方倒排表）与 `auto-mapped/`（构成物品定义表）。
+前两者回答「怎么造它」，后者回答「它本身是什么」，两套数据互不推导。其余目录直接跳过。
+
+`auto-mapped/` 只取第一段目录名等于 `auto-mapped`（或 `auto_mapped`）的 `.json`，
+`notes/`、`collectibles/`、`ClothingItems/` 等子目录同样收（命名规则一致，只是分类）。
 
 ### 本工具与参考实现的差异（有意为之）
 
@@ -53,19 +59,20 @@ AHandyToolbox.modcomponent  (ZIP)
 ### 实测数据规模（2.55 实机）
 
 ```
-容器数量   : 46（全部打开成功）
-JSON 条目  : 428
-蓝图记录   : 428（其中 recipes/ 食谱 16 份）
-涉及物品ID : 489
-解析耗时   : ~130 ms
-解析警告   : 2（AmmoCraftingTools 里有两份蓝图缺 Name 字段，已用文件名兜底）
+容器数量      : 46（全部打开成功）
+JSON 条目     : 1184（解析 1184，跳过 0）= 蓝图 423 + 物品定义 761
+蓝图记录      : 423（其中 recipes/ 食谱 16 份）
+物品定义      : 761 份（auto-mapped）
+涉及物品 ID   : 480
+解析耗时      : ~129 ms
+解析警告      : 2（AmmoCraftingTools 里有两份蓝图缺 Name 字段，已用文件名兜底）
 ```
 
 ---
 
 ## 2. 字段映射：JSON 里到底有哪些字段
 
-以下映射不是猜的，是从 46 个真实 modcomponent、428 份蓝图 JSON 里统计出来的。
+以下映射不是猜的，是从 46 个真实 modcomponent、423 份蓝图 JSON、761 份物品定义里统计出来的。
 
 ### 2.1 两种文件布局
 
@@ -140,6 +147,42 @@ JSON 条目  : 428
 第三种实测出现 25 次（集中在 `Bountiful_Foraging`）。**只认 `Count` 的实现会把这些原料的用量读成 1**，
 虽然不影响检索命中，但显示出来的量是错的。
 
+### 2.4 `auto-mapped/*.json`：物品定义（不是配方）
+
+`auto-mapped/` 里放的是**物品预制体本身的组件参数**——重量、腐坏、可堆叠、可燃、能否烹饪——
+与 `blueprints/` 的「怎么造它」是两套数据。查询物品 ID 时把这份 JSON 一并贴出来，改 mod 时不用再自己解压容器。
+
+```json
+{
+  "ModGenericComponent": {
+    "DisplayNameLocalizationId": "GAMEPLAY_SugarA",
+    "WeightKG": 0.25,
+    "DaysToDecay": 0,
+    "MaxHP": 100.0,
+    "InventoryCategory": "Food",
+    "NormalModel": ""
+  },
+  "ModStackableBehaviour": { "MaxStackSize": 10 }
+}
+```
+
+- 布局：`auto-mapped/<内部名>.json`；另有 `notes/`、`collectibles/`、`collectibles/cards/`、`ClothingItems/`
+  四个子目录，只是分类，命名规则相同。
+- 顶层是「组件名 → 组件参数」的字典，实测 40+ 种组件：
+  `ModGenericComponent`（289）、`ModHarvestableBehaviour`（191）、`ModFoodComponent`（164）、
+  `ModStackableBehaviour`（107）、`ModBurnableBehaviour`（79）……
+- 本机扫描结果：46 个容器共 **761 份**定义。
+
+**三个必须处理的现实问题**
+
+1. **文件里没有预制体 ID**，只有 `DisplayNameLocalizationId` 之类的本地化 key，
+   所以「这个 ID 对应哪份定义」只能靠文件名反推（见 §3 末）。
+2. **文件名比 ID 少一个前缀**：文件叫 `sugara.json`，物品叫 `GEAR_sugara`；
+   `GEAR_` / `LIQUID_` / `POWDER_` 都不写在文件里。
+3. **尾逗号很常见**：Bountiful_Foraging 等 mod 导出的 JSON 带尾逗号，必须开 `AllowTrailingCommas`。
+   真的解析失败也不丢内容——原文照样展示，另附一条提示，因为对二次开发的人来说
+   一份有瑕疵但完整的 JSON 仍然比空白有用。
+
 ---
 
 ## 3. 双向检索的判定条件
@@ -151,6 +194,7 @@ JSON 条目  : 428
 | ① 作为产物 | `blueprint.CraftedResult` 与查询串匹配 |
 | ② 作为原料 | `RequiredGear[].Item`、`RequiredPowder[].Powder`、`RequiredLiquid[].Liquid` 任一项匹配 |
 | ③ 作为工具 | `RequiredTool`、`OptionalTools[]`、`AllowedCookingPots[]` 任一项匹配 |
+| ④ 物品定义 | `auto-mapped/<名字>.json` 的文件名（去掉前缀后）与查询串匹配，见下 |
 
 匹配强度分三级，结果按强度排序并在界面上可视化（斜体 + 变色 + 悬停提示）：
 
@@ -160,9 +204,28 @@ JSON 条目  : 428
 | 仅精确匹配 | 只出完全相等 |
 | 仅子串匹配 | 只出「包含」且排除精确（用来捞一批同族 ID） |
 
-**去重**：「合并同名蓝图」勾选后，跨 mod 的同名蓝图（实测 428 条记录里有 42 条重名，例如 `Bountiful_Foraging` 与
+**去重**：「合并同名蓝图」勾选后，跨 mod 的同名蓝图（实测 423 条记录里有 42 条重名，例如 `Bountiful_Foraging` 与
 `DZ_Bountiful_Foraging` 是同一 mod 的两个版本）合并成一行，「来源 Mod」列显示全部来源，详情面板逐份列出。
 取消勾选则一行一份，便于排查 mod 冲突。
+
+### ④ 物品定义怎么定 ID
+
+文件名只有内部名，没有前缀，所以按可信度分三档反推宿主 ID，界面上「判定依据」列会明说用的是哪一档：
+
+| 判定依据 | 含义 |
+| --- | --- |
+| 同 mod 配方引用 | 本容器的 `blueprints/`/`recipes/` 里出现过「前缀 + 文件名」，直接采用 |
+| 其他 mod 引用 | 本容器没引用，但别处配方引用过同名 ID（物品与配方经常不在同一个 mod 里） |
+| 仅文件名 | 谁都没引用过，只按名字展示，前缀未知 |
+
+三档都没有时 `ItemId` 显示裸文件名，而不是替用户猜一个 `GEAR_` 上去——猜错比不猜更糟。
+
+**大小写陷阱**：语料里同时存在 `GEAR_sugara`（MoreMeds 的物品）和 `GEAR_SugarA`（原版糖，被玫瑰果酱配方引用），
+去掉前缀后文件名都是 `sugara`。所以：
+
+- 反推时优先「大小写完全一致」的候选（`sugara` → `GEAR_sugara`）；
+- 查询时若宿主 ID 与输入只差大小写、且语料里确实有同形异写的另一个 ID，
+  该行标注「大小写不同」并在详情里点名提醒，避免把两件物品认成一件。
 
 ---
 
@@ -173,23 +236,30 @@ TLD_ModBlueprintFinder/                ← 仓库根目录
 ├── README.md                          面向玩家的说明（安装 / 使用 / FAQ）
 ├── LICENSE
 ├── TLD_ModBlueprintFinder.sln
+├── publish.bat                        一键发布单文件自包含 exe → dist\
+├── dist/                              发布产物（不入库）：TLD_ModBlueprintFinder.exe
 ├── docs/                              ← 本文件所在目录
 │   ├── DEVELOPMENT.md                 本文件：数据格式、字段映射、分层设计
 │   ├── BUG-001-detail-switch.md       缺陷 001：详情面板切换失效
 │   └── img/                           界面与复现截图
 └── TLD_ModBlueprintFinder/            源码工程
     ├── TLD_ModBlueprintFinder.csproj
+    ├── Properties/PublishProfiles/
+    │   └── SelfContainedSingleFile.pubxml   单文件 + 自包含发布配置
     ├── Program.cs                     入口（GUI / CLI 分流）
     ├── Cli.cs                         无界面模式
     ├── Models/
-    │   └── BlueprintRecord.cs         BlueprintRecord / Ingredient / ContainerSummary / ScanReport
+    │   ├── BlueprintRecord.cs         BlueprintRecord / Ingredient / ContainerSummary / ScanReport
+    │   └── ItemDefinition.cs          ItemDefinition（auto-mapped 物品定义）/ ItemIds 前缀规则
     ├── Parsing/
     │   ├── JsonHelpers.cs             宽容 JSON 取值（多字段名、字符串数字、单值/数组）
     │   ├── BlueprintParser.cs         蓝图映射：字段 → 模型，含 BlueprintData 解包
+    │   ├── ItemDefinitionParser.cs    物品定义：组件清单 + 原文，尾逗号容错
     │   └── ModScanner.cs              ZIP / 目录遍历、路径解析、条目分类
     ├── Indexing/
     │   ├── BlueprintIndex.cs          三张倒排表 + 匹配强度 + 相近 ID 建议
-    │   └── BlueprintSearchEngine.cs   双向检索、聚合去重、SearchRow
+    │   ├── BlueprintSearchEngine.cs   双向检索、聚合去重、SearchRow
+    │   └── ItemDefinitionIndex.cs     IDetailRow 接口 + 定义按文件名反推 ID
     ├── Export/
     │   └── CsvExporter.cs             带 BOM 的 UTF-8 CSV
     └── Ui/
@@ -228,15 +298,44 @@ dotnet build -c Release
 dotnet run --project TLD_ModBlueprintFinder
 ```
 
-或直接双击 `TLD_ModBlueprintFinder\bin\Release\net8.0-windows\TLD_ModBlueprintFinder.exe`。
+或直接双击 `TLD_ModBlueprintFinder\bin\Debug\net8.0-windows\TLD_ModBlueprintFinder.exe`。
 
-### 发布成单文件（可选）
+> ⚠️ **`bin\` 里的 exe 不能单独拷走。** 它是框架依赖的中间产物，必须和同目录的
+> `TLD_ModBlueprintFinder.dll`、`.deps.json`、`.runtimeconfig.json` 待在一起，
+> 只把 exe 复制到别处会起不来（现象：双击没反应或提示缺少 .NET / 找不到 dll）。
+> 要分发的独立 exe 走下面的「发布」，产物在仓库根目录 `dist\`。
+
+### 发布：单文件 + 自包含（分发用这个）
 
 ```bat
-dotnet publish TLD_ModBlueprintFinder -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true
+publish.bat
 ```
 
-`--self-contained true` 可以打包运行时（约 70 MB），拷给别人不用装 .NET。
+等价于：
+
+```bat
+dotnet publish TLD_ModBlueprintFinder -p:PublishProfile=SelfContainedSingleFile
+```
+
+配置在 `TLD_ModBlueprintFinder\Properties\PublishProfiles\SelfContainedSingleFile.pubxml`，
+Visual Studio 的「发布」向导里也能直接选到。产物：`dist\TLD_ModBlueprintFinder.exe`，
+**一个文件，约 63 MB**，目标机器不需要装 .NET，双击即跑。
+
+| 设置 | 值 | 原因 |
+| --- | --- | --- |
+| `RuntimeIdentifier` | `win-x64` | 单文件必须先定 RID；x86/ARM 需要各发一份 |
+| `SelfContained` | `true` | 把 .NET 运行时打进 exe —— 这是「拷到哪都能双击」的关键 |
+| `PublishSingleFile` | `true` | 托管 dll 与运行时合并进同一个 exe |
+| `IncludeNativeLibrariesForSelfExtract` | `true` | 原生库也塞进包里，首次运行解压到 `%TEMP%\.net\`，否则会漏几个 dll 在旁边 |
+| `EnableCompressionInSingleFile` | `true` | 100 MB → 63 MB，代价是启动多约 0.8 s（实测总启动 1.1 s） |
+| `PublishTrimmed` | `false` | WinForms 不支持裁剪，开了会在运行期炸反射 |
+| `DebugType` | `none` | 不生成 pdb，保证 `dist\` 只有一个文件 |
+
+实测：把 `dist\` 里那个 exe 单独复制到带空格与中文的空目录，`--cli --scan-only` 正常输出，
+GUI 正常启动并在自己旁边生成 `TLD_ModBlueprintFinder_settings.json`。
+
+**为什么 `dotnet build` 出来的不是单文件**：`PublishSingleFile` 只在 publish 阶段生效，
+`build` 永远输出一堆文件。所以每次都走 `publish.bat`，别从 `bin\` 里拿 exe 去分发。
 
 ---
 
@@ -248,9 +347,10 @@ dotnet publish TLD_ModBlueprintFinder -c Release -r win-x64 --self-contained fal
 2. **扫描 Mods**：解析全部容器。完成后右侧显示扫描摘要（每个 mod 贡献多少条蓝图、哪些容器打不开、
    哪些蓝图字段有问题）。路径上次用过会自动记住并直接扫。
 3. **输入物品 ID**，回车或点 **检索**。不知道全名就只输一部分，切到「自动」模式即可。
-4. 结果分三个 Tab。点任意一行，右侧显示完整原料清单、工具、额外条件（煤油/火药/照明/技能等级）
-   和**原始 JSON**，可以直接核对字段。
-5. **导出 CSV**（三组结果一次导出，UTF-8 带 BOM，Excel 直接开）或 **复制**详情到剪贴板。
+4. 结果分四个 Tab（产物 / 原料 / 工具 / 物品定义）。点任意一行，右侧显示完整原料清单、工具、
+   额外条件（煤油/火药/照明/技能等级）和**原始 JSON**；物品定义页签显示的是物品自身的 JSON。
+5. **导出 CSV**（四组结果一次导出，UTF-8 带 BOM，Excel 直接开）或 **复制**详情到剪贴板。
+   物品定义行沿用同一套列，末尾多一列 `物品定义JSON`（配方行该列为空）。
 
 ### 命令行模式
 
@@ -282,24 +382,30 @@ TLD_ModBlueprintFinder.exe --path "F:\...\TheLongDark" --item GEAR_ScrapMetal
 
 ## 7. 验证方法（用你的机器自测）
 
-在 2.55 实机（46 个容器 / 428 份蓝图）上的真实结果，可用来确认工具在你的环境里工作正常：
+在 2.55 实机（46 个容器 / 423 份蓝图 / 761 份物品定义）上的真实结果，可用来确认工具在你的环境里工作正常：
 
 | 命令 | 期望结果 |
 | --- | --- |
-| `--item GEAR_ScrapMetal` | 产物 **3** 条、原料 **28** 条、工具 **0** 条 |
-| `--item GEAR_Hammer` | 产物 **1** 条、原料 **0** 条、工具 **26** 条 |
+| `--item GEAR_ScrapMetal` | 产物 **3** 条、原料 **28** 条、工具 **0** 条、物品定义 **1** 份（包含匹配到 `knifescrapmetal`） |
+| `--item GEAR_Hammer` | 产物 **1** 条、原料 **0** 条、工具 **26** 条、物品定义 **2** 份（`blacksmithhammer`、`stonehammer`） |
+| `--item GEAR_sugara` | 配方 **6** 条、物品定义 **1** 份，指向 `MoreMeds :: auto-mapped/sugara.json`，判定依据「同 mod 配方引用」 |
+| `--item GEAR_SugarA` | 同一份定义，但多一个「大小写不同」标记 —— 原版糖没有自己的 JSON，反推过去的是 MoreMeds 那件 |
+| `--item GEAR_Bones` | 原料 **3** 条、物品定义 **3** 份（`bones`、`orcabones1`、`orcabones2`，后两份靠包含匹配） |
+| `--item GEAR_1firconefuel` | 配方 **0** 条、物品定义 **2** 份，判定依据为「仅文件名」—— 有物品没配方是常态 |
 | `--item GEAR_UncookedBroth` | 产物 **1** 条，来源标为「食谱」`recipes/bonebroth.json`，原料含 `POWDER_Salt 0.01 kg` 与 `LIQUID_WaterPotable 1.5 L` |
 | `--item gear_scrapmetal`（全小写） | 与第一条完全一致，验证大小写不敏感 |
-| `--item GEAR_Acorn` | 产物 4 条（1 精确 + 3 前缀/包含）、原料 5 条 |
+| `--item GEAR_Acorn` | 产物 4 条（1 精确 + 3 前缀/包含）、原料 5 条、物品定义 3 份 |
 | `--item GEAR_Acorn --mode exact` | 产物 **1** 条、原料 **2** 条 |
 | `--item GEAR_Acorn --mode fuzzy` | 产物 3 条（排除精确那条） |
 | `--item GEAR_AcornShel` | 前缀匹配命中 `GEAR_AcornShelled`，界面标为斜体/橙色 |
 
-自检三步：
+自检四步：
 
-1. `--scan-only` 看「蓝图记录」是否在数百条量级。若为 0，先确认 `Mods` 里真有 `*.modcomponent`。
+1. `--scan-only` 看「蓝图记录」是否在数百条量级、「物品定义」是否与之同量级。若为 0，先确认 `Mods` 里真有 `*.modcomponent`。
 2. `--item GEAR_Hammer` 的「③ 作为工具」若为 0，说明只索引了部分 mod。
 3. 随便点开一条，右侧原始 JSON 的 `CraftedResult` 应与「产物」列一致 —— 这是字段映射正确的直接证据。
+4. 点开任意一条「④ 物品定义」，贴出的 JSON 顶层键应全是 `Mod*Component` / `Mod*Behaviour`。
+   若键名是 `Name`/`CraftedResult`，说明 `IsDefinitionEntry` 把配方误判成了定义。
 
 ---
 
@@ -308,12 +414,25 @@ TLD_ModBlueprintFinder.exe --path "F:\...\TheLongDark" --item GEAR_ScrapMetal
 - **不包含原版配方**。游戏本体的蓝图是 `ScriptableObject`，打包在 `tld_Data` 的资产里，不在任何 `modcomponent` 中。
   因此查原版物品可能得到「无匹配」——工具会在无结果时明确说明这一点，而不是假装没有配方。
   需要覆盖原版的话，得另行解析游戏资产，属于另一个工程。
-- **只读**。不写 `Mods`、不写存档。唯一的写操作是 `%APPDATA%\TLD_ModBlueprintFinder\settings.json`
-  （记住上次路径）和你主动导出的 CSV。
+- **只读**。不写 `Mods`、不写存档。唯一的写操作是**程序所在目录**的 `TLD_ModBlueprintFinder_settings.json`
+  （记住上次路径与三个勾选项）和你主动导出的 CSV。
+  注意「程序所在目录」这层含义：把 exe 放进游戏根目录时，这份配置就会落在游戏目录里，
+  所以 README 里明确建议别放进去。要彻底不碰游戏目录，也可以改回 `ApplicationData`。
+  路径取 `AppContext.BaseDirectory` 而不是 `Directory.GetCurrentDirectory()`：后者会被快捷方式的
+  「起始位置」和命令行启动时的工作目录改写，配置会散落到各处；`BaseDirectory` 在单文件发布下也稳定指向 exe 同目录。
+- **exe 放在只读位置时不报错也不落盘**：`SaveSettings()` 吞掉异常，代价是下次启动不记得上次路径。
+  这是刻意的 —— 一个记不住路径的提示比一个弹窗更烦人。
+- **单文件 exe 首次运行会往 `%TEMP%\.net\TLD_ModBlueprintFinder\<随机名>\` 解压约 8 MB 原生库**
+  （`vcruntime140_cor3.dll`、`D3DCompiler_47_cor3.dll` 等），这是 `IncludeNativeLibrariesForSelfExtract`
+  的既定行为。`%TEMP%` 被组策略锁死的机器会因此起不来，那种环境得改用框架依赖版。
+- **1.2.0 之前的版本把配置放在 `%APPDATA%\TLD_ModBlueprintFinder\settings.json`**，新版不再读写该位置。
+  升级后首次启动不会继承旧路径（只是「上次路径」这一项，重选一次即可），旧目录可手动删除。
 - **不校验 mod 是否生效**。DLL 类型 mod（不提供 modcomponent）不会出现在结果里。
 - `_ModComponentTemp` 默认不扫：它是 ModComponent 加载时解压的副本，扫了会与 zip 内容重复计数。
   需要时用 `--temp` 或改 `ScanOptions.IncludeModComponentTemp`。
-- 大小写不同的两个不同 ID 会被当成同一个（`OrdinalIgnoreCase`）—— 这是为玩家手输体验做的取舍。
+- **配方检索**把大小写不同的两个 ID 当成同一个（`OrdinalIgnoreCase`）—— 这是为玩家手输体验做的取舍。
+  代价是 `GEAR_SugarA` 与 `GEAR_sugara` 这类同形异写的物品在配方列表里会一起出现。
+  物品定义那边不这么做：反推 ID 时优先大小写完全一致的候选，避免把两件物品的 JSON 装错。
 
 ---
 

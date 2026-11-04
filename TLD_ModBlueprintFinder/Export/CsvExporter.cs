@@ -9,7 +9,8 @@ public static class CsvExporter
     private static readonly string[] Header =
     {
         "类别", "蓝图名", "食谱键", "产物", "产出数量", "匹配说明",
-        "制作地点", "耗时", "原料", "工具", "额外条件", "来源Mod", "来源类型", "副本数", "容器", "条目路径"
+        "制作地点", "耗时", "原料", "工具", "额外条件", "来源Mod", "来源类型", "副本数", "容器", "条目路径",
+        "物品定义JSON"
     };
 
     /// <summary>把一次查询的三组结果汇总成 CSV 文本。</summary>
@@ -21,6 +22,7 @@ public static class CsvExporter
         AppendRows(sb, outcome.AsProduct, "作为产物");
         AppendRows(sb, outcome.AsIngredient, "作为原料");
         AppendRows(sb, outcome.AsTool, "作为工具");
+        AppendDefinitions(sb, outcome.Definitions);
 
         return sb.ToString();
     }
@@ -55,7 +57,42 @@ public static class CsvExporter
                 row.SourceKindText,
                 row.DuplicateText,
                 p.ContainerPath,
-                p.EntryPath
+                p.EntryPath,
+                string.Empty        // 物品定义 JSON：配方行没有这一列的内容
+            };
+
+            sb.AppendLine(string.Join(",", values.Select(Escape)));
+        }
+    }
+
+    /// <summary>
+    /// 物品定义行。列位沿用配方表，只有 ID / 判定依据 / 组件 / 来源 / 路径 / JSON 有意义，
+    /// 其余留空——这样一份 CSV 里两类数据能同时存在，不必多导一个文件。
+    /// </summary>
+    private static void AppendDefinitions(StringBuilder sb, IEnumerable<DefinitionRow> rows)
+    {
+        foreach (var row in rows)
+        {
+            var d = row.Definition;
+            var values = new[]
+            {
+                "物品定义",
+                row.ItemId,
+                string.Empty,          // 食谱键
+                string.Empty,          // 产物
+                string.Empty,          // 产出数量
+                row.ConfidenceText,    // 判定依据
+                string.Empty,          // 制作地点
+                string.Empty,          // 耗时
+                row.ComponentsText,    // 组件
+                string.Empty,          // 工具
+                string.Empty,          // 额外条件
+                row.ModName,
+                "auto-mapped",
+                string.Empty,          // 副本数
+                d.ContainerPath,
+                d.EntryPath,
+                d.JsonText
             };
 
             sb.AppendLine(string.Join(",", values.Select(Escape)));

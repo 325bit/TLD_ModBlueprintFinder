@@ -9,9 +9,9 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>TLD_ModBlueprintFinder</RootNamespace>
     <AssemblyName>TLD_ModBlueprintFinder</AssemblyName>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Product>TLD Mod Blueprint Finder</Product>
-    <Description>《漫漫长夜》Mod 配方检索工具：输入物品 ID，双向列出产物 / 原料 / 工具三类蓝图（只读）</Description>
+    <Description>《漫漫长夜》Mod 配方检索工具：输入物品 ID，双向列出产物 / 原料 / 工具三类蓝图，并贴出该物品在 auto-mapped 里的 JSON 定义（只读）</Description>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationDefaultFont>Microsoft YaHei UI, 9pt</ApplicationDefaultFont>
     <ApplicationVisualStyles>true</ApplicationVisualStyles>

@@ -7,7 +7,7 @@ namespace TLD_ModBlueprintFinder.Indexing;
 /// 结果表里的一行。一个 <see cref="SearchRow"/> 可能聚合多份同名蓝图（不同 mod 的副本），
 /// 用 <see cref="Records"/> 保存全部来源，<see cref="Primary"/> 作为展示代表。
 /// </summary>
-public sealed class SearchRow
+public sealed class SearchRow : IDetailRow
 {
     public SearchRow(IReadOnlyList<BlueprintRecord> records, MatchQuality quality, string matchNote)
     {
@@ -174,15 +174,20 @@ public sealed class SearchOutcome
     public List<SearchRow> AsIngredient { get; } = new();
     public List<SearchRow> AsTool { get; } = new();
 
+    /// <summary>该物品在 modcomponent 里的 JSON 定义（auto-mapped），没有则为空。</summary>
+    public List<DefinitionRow> Definitions { get; } = new();
+
     /// <summary>查无匹配时给出的相近 ID 建议。</summary>
     public IReadOnlyList<string> Suggestions { get; set; } = Array.Empty<string>();
 
     /// <summary>给用户看的备注（例如提示只覆盖 Mod 蓝图）。</summary>
     public List<string> Notes { get; } = new();
 
+    /// <summary>三类配方命中数（不含物品定义）。</summary>
     public int TotalHits => AsProduct.Count + AsIngredient.Count + AsTool.Count;
 
-    public bool IsEmpty => TotalHits == 0;
+    /// <summary>配方一条都没中，物品定义也没找到。</summary>
+    public bool IsEmpty => TotalHits == 0 && Definitions.Count == 0;
 }
 
 /// <summary>
@@ -199,7 +204,14 @@ public sealed class BlueprintSearchEngine
 {
     public BlueprintIndex Index { get; }
 
-    public BlueprintSearchEngine(BlueprintIndex index) => Index = index;
+    /// <summary>物品定义索引。为 null 表示本次扫描没拿到 auto-mapped 内容。</summary>
+    public ItemDefinitionIndex? Definitions { get; }
+
+    public BlueprintSearchEngine(BlueprintIndex index, ItemDefinitionIndex? definitions = null)
+    {
+        Index = index;
+        Definitions = definitions;
+    }
 
     public SearchOutcome Search(string rawQuery, MatchMode mode = MatchMode.Auto, bool mergeDuplicates = true)
     {
@@ -272,7 +284,12 @@ public sealed class BlueprintSearchEngine
         outcome.AsTool.AddRange(BuildRows(toolGroups, toolQuality,
             key => toolNote.TryGetValue(key, out var n) ? n : "作为工具"));
 
-        // ④ 无结果时给建议
+        // ④ 物品定义（auto-mapped 里的 JSON）。与配方命中相互独立：
+        //    有些物品只有定义没有配方，反过来也有。
+        if (Definitions is not null)
+            outcome.Definitions.AddRange(Definitions.Search(query, mode));
+
+        // ⑤ 无结果时给建议
         if (outcome.IsEmpty)
         {
             var suggestions = Index.SuggestSimilarIds(query);

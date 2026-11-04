@@ -430,7 +430,8 @@ public static class BlueprintParser
     // 文本解码
     // ────────────────────────────────────────────────────────────────────
 
-    private static string DecodeText(byte[] bytes)
+    /// <summary>字节 → 文本。物品定义解析器（ItemDefinitionParser）复用同一套 BOM 处理。</summary>
+    internal static string DecodeText(byte[] bytes)
     {
         if (bytes.Length == 0) return string.Empty;
 

@@ -286,8 +286,10 @@ public sealed class ModScanner
             ct.ThrowIfCancellationRequested();
 
             if (string.IsNullOrEmpty(entry.Name)) continue;   // 目录条目
-            var kind = ClassifyEntry(entry.FullName);
-            if (kind is null) continue;
+
+            var isDefinition = IsDefinitionEntry(entry.FullName);
+            var kind = isDefinition ? null : ClassifyEntry(entry.FullName);
+            if (!isDefinition && kind is null) continue;
 
             report.JsonEntriesSeen++;
 
@@ -315,8 +317,14 @@ public sealed class ModScanner
                 continue;
             }
 
+            if (isDefinition)
+            {
+                AddDefinition(modName, zipPath, entry.FullName, bytes, summary, report);
+                continue;
+            }
+
             var before = report.Records.Count;
-            var parsed = BlueprintParser.ParseMany(modName, zipPath, entry.FullName, kind.Value, bytes, report.Errors);
+            var parsed = BlueprintParser.ParseMany(modName, zipPath, entry.FullName, kind!.Value, bytes, report.Errors);
             report.Records.AddRange(parsed);
 
             if (report.Records.Count > before)
@@ -356,12 +364,13 @@ public sealed class ModScanner
             ct.ThrowIfCancellationRequested();
 
             var relative = Path.GetRelativePath(dir, file).Replace('\\', '/');
-            var kind = ClassifyEntry(relative);
-            if (kind is null) continue;
+            var isDefinition = IsDefinitionEntry(relative);
+            var kind = isDefinition ? null : ClassifyEntry(relative);
+            if (!isDefinition && kind is null) continue;
 
             report.JsonEntriesSeen++;
 
-            int before = report.Records.Count;
+            var before = report.Records.Count;
             try
             {
                 var info = new FileInfo(file);
@@ -374,7 +383,14 @@ public sealed class ModScanner
                 }
 
                 var bytes = File.ReadAllBytes(file);   // 只读，不写
-                var parsed = BlueprintParser.ParseMany(modName, dir, relative, kind.Value, bytes, report.Errors);
+
+                if (isDefinition)
+                {
+                    AddDefinition(modName, dir, relative, bytes, summary, report);
+                    continue;
+                }
+
+                var parsed = BlueprintParser.ParseMany(modName, dir, relative, kind!.Value, bytes, report.Errors);
                 report.Records.AddRange(parsed);
             }
             catch (Exception ex)
@@ -395,6 +411,51 @@ public sealed class ModScanner
                 report.JsonEntriesSkipped++;
             }
         }
+    }
+
+    /// <summary>把一份 auto-mapped JSON 收进报告，并同步计数与错误列表。</summary>
+    private static void AddDefinition(
+        string modName,
+        string containerPath,
+        string entryPath,
+        byte[] bytes,
+        ContainerSummary summary,
+        ScanReport report)
+    {
+        var outcome = ItemDefinitionParser.Parse(modName, containerPath, entryPath, bytes);
+
+        if (outcome.Definition is null)
+        {
+            report.Errors.Add($"{modName} :: {entryPath} → {outcome.SkipReason}");
+            report.JsonEntriesSkipped++;
+            summary.EntryErrorCount++;
+            return;
+        }
+
+        report.Definitions.Add(outcome.Definition);
+        report.JsonEntriesParsed++;
+        summary.DefinitionCount++;
+    }
+
+    /// <summary>
+    /// 判断条目是否为 auto-mapped/ 下的物品定义。
+    /// 只看「路径中第一段是 auto-mapped」这一种形态：ModComponent 导出时固定这样放，
+    /// 其他地方出现的同名 JSON 不当作物品定义，避免误读。
+    /// </summary>
+    internal static bool IsDefinitionEntry(string entryPath)
+    {
+        if (string.IsNullOrWhiteSpace(entryPath)) return false;
+        if (!entryPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return false;
+
+        var normalized = entryPath.Replace('\\', '/').TrimStart('/');
+        var slash = normalized.IndexOf('/');
+
+        // 必须位于某个子目录里：auto-mapped/xxx.json 或 auto-mapped/collectibles/xxx.json
+        if (slash <= 0) return false;
+
+        var first = normalized.Substring(0, slash);
+        return first.Equals("auto-mapped", StringComparison.OrdinalIgnoreCase) ||
+               first.Equals("auto_mapped", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

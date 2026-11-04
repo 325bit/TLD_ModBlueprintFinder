@@ -219,6 +219,10 @@ public sealed class ContainerSummary
     public bool LoadFailed { get; set; }
     public string? FailureReason { get; set; }
     public int BlueprintCount { get; set; }
+
+    /// <summary>这个容器里 auto-mapped/ 的物品定义份数。</summary>
+    public int DefinitionCount { get; set; }
+
     public int EntryErrorCount { get; set; }
 }
 
@@ -226,6 +230,10 @@ public sealed class ContainerSummary
 public sealed class ScanReport
 {
     public List<BlueprintRecord> Records { get; } = new();
+
+    /// <summary>auto-mapped/ 里的物品定义（物品本身长什么样，不是配方）。</summary>
+    public List<ItemDefinition> Definitions { get; } = new();
+
     public List<ContainerSummary> Containers { get; } = new();
     public List<string> Errors { get; } = new();
     public int JsonEntriesSeen { get; set; }

@@ -25,11 +25,13 @@ public sealed partial class MainForm
     private readonly DataGridView _gridProduct = new() { Name = "gridProduct" };
     private readonly DataGridView _gridIngredient = new() { Name = "gridIngredient" };
     private readonly DataGridView _gridTool = new() { Name = "gridTool" };
+    private readonly DataGridView _gridDefinition = new() { Name = "gridDefinition" };
     private readonly RichTextBox _txtDetail = new();
     private readonly SplitContainer _split = new();
     private readonly TabPage _pageProduct = new("① 作为产物");
     private readonly TabPage _pageIngredient = new("② 作为原料");
     private readonly TabPage _pageTool = new("③ 作为工具");
+    private readonly TabPage _pageDefinition = new("④ 物品定义");
 
     // ── 状态区 ──
     private readonly StatusStrip _status = new();
@@ -196,9 +198,11 @@ public sealed partial class MainForm
         _pageProduct.Controls.Add(_gridProduct);
         _pageIngredient.Controls.Add(_gridIngredient);
         _pageTool.Controls.Add(_gridTool);
+        _pageDefinition.Controls.Add(_gridDefinition);
         _tabs.TabPages.Add(_pageProduct);
         _tabs.TabPages.Add(_pageIngredient);
         _tabs.TabPages.Add(_pageTool);
+        _tabs.TabPages.Add(_pageDefinition);
         _tabs.SelectedIndexChanged += OnTabChanged;
         _split.Panel1.Controls.Add(_tabs);
 
@@ -308,6 +312,18 @@ public sealed partial class MainForm
             Col("来源 Mod", nameof(SearchRow.ModSources), 108),
             Col("类型", nameof(SearchRow.SourceKindText), 54)
         }, _gridTool_SelectionChanged);
+
+        // 物品定义：一份 auto-mapped JSON 一行。这里不显示配方相关列，
+        // 因为这份数据描述的是「物品本身」，跟怎么做出来无关。
+        ConfigureGrid(_gridDefinition, new[]
+        {
+            Col("物品 ID", nameof(DefinitionRow.ItemId), 168),
+            Col("判定依据", nameof(DefinitionRow.ConfidenceText), 124),
+            Col("组件", nameof(DefinitionRow.ComponentsText), 200, fill: true),
+            Col("来源 Mod", nameof(DefinitionRow.ModName), 108),
+            Col("定义文件", nameof(DefinitionRow.EntryPath), 152),
+            Col("大小", nameof(DefinitionRow.SizeText), 58)
+        }, _gridDefinition_SelectionChanged);
     }
 
     private void ConfigureGrid(DataGridView grid, DataGridViewColumn[] columns, EventHandler onSelectionChanged)
@@ -377,10 +393,13 @@ public sealed partial class MainForm
         Margin = new Padding(0, S(4), S(4), 0)
     };
 
-    /// <summary>把结果填进表格。用 BindingList 包装，才能让点击列头排序正常工作。</summary>
-    private static void Bind(DataGridView grid, IEnumerable<SearchRow> rows)
+    /// <summary>
+    /// 把结果填进表格。用 BindingList 包装，才能让点击列头排序正常工作。
+    /// 泛型是因为物品定义表绑定的是另一套行类型（<see cref="DefinitionRow"/>）。
+    /// </summary>
+    private static void Bind<T>(DataGridView grid, IEnumerable<T> rows) where T : class
     {
-        grid.DataSource = new BindingList<SearchRow>(rows.ToList());
+        grid.DataSource = new BindingList<T>(rows.ToList());
     }
 
 }

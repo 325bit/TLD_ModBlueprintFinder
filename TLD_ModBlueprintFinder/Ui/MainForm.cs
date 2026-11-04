@@ -19,6 +19,7 @@ public sealed partial class MainForm : Form
     private ScanReport? _report;
     private BlueprintIndex? _index;
     private BlueprintSearchEngine? _engine;
+    private ItemDefinitionIndex? _definitions;
     private SearchOutcome? _outcome;
     private CancellationTokenSource? _scanCts;
     private bool _busy;
@@ -361,15 +362,18 @@ public sealed partial class MainForm : Form
     {
         _report = report;
         _index = new BlueprintIndex(report.Records);
-        _engine = new BlueprintSearchEngine(_index);
+        _definitions = new ItemDefinitionIndex(report.Definitions, report.Records);
+        _engine = new BlueprintSearchEngine(_index, _definitions);
         _outcome = null;
 
         Bind(_gridProduct, Array.Empty<SearchRow>());
         Bind(_gridIngredient, Array.Empty<SearchRow>());
         Bind(_gridTool, Array.Empty<SearchRow>());
+        Bind(_gridDefinition, Array.Empty<DefinitionRow>());
         _pageProduct.Text = "① 作为产物";
         _pageIngredient.Text = "② 作为原料";
         _pageTool.Text = "③ 作为工具";
+        _pageDefinition.Text = "④ 物品定义";
 
         if (report.Records.Count == 0)
         {
@@ -394,7 +398,7 @@ public sealed partial class MainForm : Form
         _txtDetail.Text = BuildScanSummary(report);
 
         SetStatus(
-            $"扫描完成：{report.Containers.Count} 个容器（失败 {failed}），{report.Records.Count} 条蓝图，耗时 {report.Elapsed.TotalMilliseconds:0} ms。",
+            $"扫描完成：{report.Containers.Count} 个容器（失败 {failed}），{report.Records.Count} 条蓝图 + {report.Definitions.Count} 份物品定义，耗时 {report.Elapsed.TotalMilliseconds:0} ms。",
             failed > 0 || report.Errors.Count > 0 ? Color.DarkOrange : Color.ForestGreen);
 
         // 已经填了物品 ID 就顺手查一次
@@ -456,17 +460,19 @@ public sealed partial class MainForm : Form
         Bind(_gridProduct, _outcome.AsProduct);
         Bind(_gridIngredient, _outcome.AsIngredient);
         Bind(_gridTool, _outcome.AsTool);
+        Bind(_gridDefinition, _outcome.Definitions);
 
         _pageProduct.Text = $"① 作为产物 ({_outcome.AsProduct.Count})";
         _pageIngredient.Text = $"② 作为原料 ({_outcome.AsIngredient.Count})";
         _pageTool.Text = $"③ 作为工具 ({_outcome.AsTool.Count})";
+        _pageDefinition.Text = $"④ 物品定义 ({_outcome.Definitions.Count})";
 
-        _lblCounts.Text = $"产物 {_outcome.AsProduct.Count} ｜ 原料 {_outcome.AsIngredient.Count} ｜ 工具 {_outcome.AsTool.Count}";
+        _lblCounts.Text = $"产物 {_outcome.AsProduct.Count} ｜ 原料 {_outcome.AsIngredient.Count} ｜ 工具 {_outcome.AsTool.Count} ｜ 定义 {_outcome.Definitions.Count}";
 
         if (_outcome.IsEmpty)
         {
             var sb = new StringBuilder();
-            sb.AppendLine($"没有找到与「{query}」相关的任何蓝图。");
+            sb.AppendLine($"没有找到与「{query}」相关的任何配方或物品定义。");
             sb.AppendLine();
 
             if (_outcome.Suggestions.Count > 0)
@@ -479,7 +485,7 @@ public sealed partial class MainForm : Form
             else
             {
                 sb.AppendLine("当前索引里没有任何相近的物品 ID。可能原因：");
-                sb.AppendLine("  · 这个物品来自原版游戏，而本工具目前只索引 Mod 的 modcomponent 蓝图");
+                sb.AppendLine("  · 这个物品来自原版游戏，而本工具只索引 Mod 的 modcomponent（蓝图 + auto-mapped 定义）");
                 sb.AppendLine("  · 该 mod 没有提供蓝图（只是添加了物品）");
                 sb.AppendLine("  · modcomponent 未被扫描到（检查路径与「含子目录」选项）");
             }
@@ -496,13 +502,18 @@ public sealed partial class MainForm : Form
                 ? $"（其中 {inexact} 条为前缀/子串匹配，已用斜体标注）"
                 : "";
 
-            SetStatus($"「{query}」共命中 {_outcome.TotalHits} 条。{note}",
+            var defNote = _outcome.Definitions.Count > 0
+                ? $"，物品定义 {_outcome.Definitions.Count} 份"
+                : "";
+
+            SetStatus($"「{query}」共命中配方 {_outcome.TotalHits} 条{defNote}。{note}",
                 inexact > 0 ? Color.DarkOrange : Color.ForestGreen);
 
             // 自动选中第一个非空结果的详情
             if (_outcome.AsProduct.Count > 0) SelectFirstRow(_tabs, _pageProduct, _gridProduct);
             else if (_outcome.AsIngredient.Count > 0) SelectFirstRow(_tabs, _pageIngredient, _gridIngredient);
             else if (_outcome.AsTool.Count > 0) SelectFirstRow(_tabs, _pageTool, _gridTool);
+            else if (_outcome.Definitions.Count > 0) SelectFirstRow(_tabs, _pageDefinition, _gridDefinition);
         }
     }
 
@@ -522,6 +533,7 @@ public sealed partial class MainForm : Form
     private void _gridProduct_SelectionChanged(object? sender, EventArgs e) => ShowDetail(_gridProduct);
     private void _gridIngredient_SelectionChanged(object? sender, EventArgs e) => ShowDetail(_gridIngredient);
     private void _gridTool_SelectionChanged(object? sender, EventArgs e) => ShowDetail(_gridTool);
+    private void _gridDefinition_SelectionChanged(object? sender, EventArgs e) => ShowDetail(_gridDefinition);
 
     /// <summary>
     /// 非精确命中的行改成橙色 / 灰色 + 斜体。
@@ -531,21 +543,22 @@ public sealed partial class MainForm : Form
     private void OnGridCellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
     {
         if (sender is not DataGridView grid || e.RowIndex < 0 || e.CellStyle is null) return;
-        if (grid.Rows[e.RowIndex].DataBoundItem is not SearchRow row) return;
+        if (grid.Rows[e.RowIndex].DataBoundItem is not IDetailRow row) return;
         if (row.Quality == MatchQuality.Exact) return;
 
         e.CellStyle.ForeColor = row.Quality == MatchQuality.Prefix
             ? Color.FromArgb(181, 96, 6)      // 前缀：深橙
             : Color.FromArgb(120, 120, 120);  // 包含：中灰
 
-        if (grid.Columns[e.ColumnIndex].Name == nameof(SearchRow.BlueprintName))
+        // 第一列是「这条结果叫什么」，非精确命中时用斜体区分
+        if (e.ColumnIndex == 0 || grid.Columns[e.ColumnIndex].Name == nameof(SearchRow.BlueprintName))
             e.CellStyle.Font = new Font(grid.Font, FontStyle.Italic);
     }
 
     private void OnGridCellToolTip(object? sender, DataGridViewCellToolTipTextNeededEventArgs e)
     {
         if (sender is not DataGridView grid || e.RowIndex < 0) return;
-        if (grid.Rows[e.RowIndex].DataBoundItem is not SearchRow row) return;
+        if (grid.Rows[e.RowIndex].DataBoundItem is not IDetailRow row) return;
 
         if (row.Quality != MatchQuality.Exact)
         {
@@ -573,11 +586,11 @@ public sealed partial class MainForm : Form
     /// </summary>
     private void ShowDetail(DataGridView grid)
     {
-        var row = grid.CurrentRow?.DataBoundItem as SearchRow;
+        var row = grid.CurrentRow?.DataBoundItem as IDetailRow;
 
         // 多选（Ctrl+点击）时 CurrentRow 仍指向锚点行；万一为空就退回第一条选中行
         if (row is null && grid.SelectedRows.Count > 0)
-            row = grid.SelectedRows[0].DataBoundItem as SearchRow;
+            row = grid.SelectedRows[0].DataBoundItem as IDetailRow;
 
         if (row is null) return;
 
@@ -601,6 +614,7 @@ public sealed partial class MainForm : Form
     private DataGridView ActiveGrid() =>
         _tabs.SelectedTab == _pageIngredient ? _gridIngredient
         : _tabs.SelectedTab == _pageTool ? _gridTool
+        : _tabs.SelectedTab == _pageDefinition ? _gridDefinition
         : _gridProduct;
 
     /// <summary>
@@ -616,7 +630,7 @@ public sealed partial class MainForm : Form
         {
             // 空页签：明确说明这一页没有结果，
             // 而不是继续显示别的页签里的蓝图（那会被误读成这一页的内容）。
-            if (_outcome is { TotalHits: > 0 })
+            if (_outcome is { IsEmpty: false })
                 SetDetailText($"「{_tabs.SelectedTab?.Text}」没有匹配结果。\n\n" +
                               "这是正常现象：该物品没有出现在这个位置。\n" +
                               "切回其它页签即可继续查看已有结果。");
@@ -637,11 +651,19 @@ public sealed partial class MainForm : Form
     private void OnGridDoubleClick(object? sender, DataGridViewCellEventArgs e)
     {
         if (e.RowIndex < 0 || sender is not DataGridView grid) return;
-        if (grid.Rows[e.RowIndex].DataBoundItem is not SearchRow row) return;
 
-        var text = $"{row.BlueprintName} → {row.ResultText}  [{row.LocationText}]  来源 {row.ModSources}";
-        TryCopy(text);
-        SetStatus("已复制该行摘要到剪贴板。", Color.DimGray);
+        switch (grid.Rows[e.RowIndex].DataBoundItem)
+        {
+            case SearchRow row:
+                TryCopy($"{row.BlueprintName} → {row.ResultText}  [{row.LocationText}]  来源 {row.ModSources}");
+                SetStatus("已复制该行摘要到剪贴板。", Color.DimGray);
+                break;
+
+            case DefinitionRow def:
+                TryCopy($"{def.ItemId}  ←  {def.ModName} :: {def.EntryPath}");
+                SetStatus("已复制该物品定义的来源到剪贴板。", Color.DimGray);
+                break;
+        }
     }
 
     private void OnCopyClick(object? sender, EventArgs e)
@@ -762,6 +784,7 @@ public sealed partial class MainForm : Form
         sb.AppendLine($"容器          : {report.Containers.Count} 个（失败 {report.Containers.Count(c => c.LoadFailed)}）");
         sb.AppendLine($"JSON 条目     : 见 {report.JsonEntriesSeen}，解析成功 {report.JsonEntriesParsed}，跳过 {report.JsonEntriesSkipped}");
         sb.AppendLine($"蓝图记录      : {report.Records.Count}（食谱 {report.Records.Count(r => r.SourceKind == BlueprintSourceKind.Recipe)}）");
+        sb.AppendLine($"物品定义      : {report.Definitions.Count} 份（auto-mapped，含未参与配方的物品）");
         sb.AppendLine($"解析警告      : {report.WarningCount}");
         sb.AppendLine($"耗时          : {report.Elapsed.TotalMilliseconds:0} ms");
         sb.AppendLine();
@@ -798,7 +821,7 @@ public sealed partial class MainForm : Form
     }
 
     // ────────────────────────────────────────────────────────────────────
-    // 设置持久化（写在 %APPDATA%，绝不写进游戏目录）
+    // 设置持久化（写在程序所在目录，绿色版式，绝不写进游戏目录）
     // ────────────────────────────────────────────────────────────────────
 
     private sealed class AppSettings
@@ -809,9 +832,15 @@ public sealed partial class MainForm : Form
         public int MatchModeIndex { get; set; }
     }
 
-    private static string SettingsFile => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "TLD_ModBlueprintFinder", "settings.json");
+    /// <summary>设置文件名。带上程序名，避免和别的工具挤在同一目录时互相覆盖。</summary>
+    private const string SettingsFileName = "TLD_ModBlueprintFinder_settings.json";
+
+    /// <summary>
+    /// 设置文件：与 exe 同目录的 TLD_ModBlueprintFinder_settings.json。
+    /// 用 BaseDirectory 而不是 CurrentDirectory，启动时的工作目录才不会把配置甩到
+    /// 快捷方式的「起始位置」或命令行所在目录去。
+    /// </summary>
+    private static string SettingsFile => Path.Combine(AppContext.BaseDirectory, SettingsFileName);
 
     private static AppSettings LoadSettings()
     {
@@ -839,15 +868,12 @@ public sealed partial class MainForm : Form
                 MatchModeIndex = _cmbMode.SelectedIndex
             };
 
-            var dir = Path.GetDirectoryName(SettingsFile)!;
-            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-
             File.WriteAllText(SettingsFile, JsonSerializer.Serialize(settings,
                 new JsonSerializerOptions { WriteIndented = true }));
         }
         catch
         {
-            // 设置保存失败不影响主流程
+            // 设置保存失败不影响主流程（exe 放在只读目录时就是这种情况，下次启动照常先扫一遍）
         }
     }
 }

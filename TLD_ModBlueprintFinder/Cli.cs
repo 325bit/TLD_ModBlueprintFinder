@@ -96,7 +96,9 @@ internal static class Cli
             };
         }
 
-        var engine = new BlueprintSearchEngine(new BlueprintIndex(report.Records));
+        var index = new BlueprintIndex(report.Records);
+        var definitions = new ItemDefinitionIndex(report.Definitions, report.Records);
+        var engine = new BlueprintSearchEngine(index, definitions);
         var outcome = engine.Search(item, mode, mergeDuplicates: !options.ContainsKey("no-merge"));
 
         PrintOutcome(outcome);
@@ -162,6 +164,7 @@ internal static class Cli
         Console.WriteLine($"容器数量    : {report.Containers.Count}（成功 {report.Containers.Count(c => !c.LoadFailed)}，失败 {report.Containers.Count(c => c.LoadFailed)}）");
         Console.WriteLine($"JSON 条目   : 共 {report.JsonEntriesSeen}，解析 {report.JsonEntriesParsed}，跳过 {report.JsonEntriesSkipped}");
         Console.WriteLine($"蓝图记录    : {report.Records.Count}（其中食谱 {report.Records.Count(r => r.SourceKind == BlueprintSourceKind.Recipe)}）");
+        Console.WriteLine($"物品定义    : {report.Definitions.Count} 份（auto-mapped）");
         Console.WriteLine($"涉及物品 ID : {report.Records.SelectMany(r => r.Ingredients.Select(i => i.ItemId)).Concat(report.Records.Select(r => r.CraftedResult)).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.OrdinalIgnoreCase).Count()}");
         Console.WriteLine($"解析警告    : {report.WarningCount}");
         Console.WriteLine($"耗时        : {report.Elapsed.TotalMilliseconds:0} ms");
@@ -191,6 +194,7 @@ internal static class Cli
         PrintSection("① 作为产物（制作它需要的蓝图）", outcome.AsProduct);
         PrintSection("② 作为原料（消耗它的蓝图）", outcome.AsIngredient);
         PrintSection("③ 作为工具（需要/可用它的蓝图）", outcome.AsTool);
+        PrintDefinitions(outcome.Definitions);
 
         if (outcome.IsEmpty)
         {
@@ -199,7 +203,33 @@ internal static class Cli
             foreach (var s in outcome.Suggestions) Console.WriteLine("  · " + s);
         }
 
-        Console.WriteLine($"合计命中：{outcome.TotalHits} 条");
+        Console.WriteLine($"合计命中：配方 {outcome.TotalHits} 条 ｜ 物品定义 {outcome.Definitions.Count} 份");
+    }
+
+    private static void PrintDefinitions(List<DefinitionRow> rows)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"④ 物品定义（auto-mapped 里的 JSON）  ——  {rows.Count} 份");
+
+        if (rows.Count == 0)
+        {
+            Console.WriteLine("  (无)");
+            return;
+        }
+
+        foreach (var row in rows)
+        {
+            Console.WriteLine($"  ▸ {row.ItemId}   [{row.ConfidenceText}]");
+            Console.WriteLine($"     文件: {row.EntryPath}   来源: {row.ModName}   大小: {row.SizeText}");
+            Console.WriteLine($"     组件: {row.ComponentsText}");
+
+            if (!string.IsNullOrWhiteSpace(row.Definition.ParseWarning))
+                Console.WriteLine($"     ⚠ {row.Definition.ParseWarning}");
+
+            Console.WriteLine("     ──── JSON 定义 ────");
+            foreach (var line in row.Definition.JsonText.Replace("\r\n", "\n").Split('\n'))
+                Console.WriteLine("     " + line);
+        }
     }
 
     private static void PrintSection(string title, List<SearchRow> rows)
