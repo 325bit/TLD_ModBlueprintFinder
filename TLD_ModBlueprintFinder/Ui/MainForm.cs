@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Win32;
+using TLD_ModBlueprintFinder.Editing;
 using TLD_ModBlueprintFinder.Export;
 using TLD_ModBlueprintFinder.Indexing;
 using TLD_ModBlueprintFinder.Models;
@@ -63,6 +64,8 @@ public sealed partial class MainForm : Form
 
         // 命令行预置优先于上次记住的路径
         var startPath = !string.IsNullOrWhiteSpace(_initialPath) ? _initialPath : settings.LastPath;
+        _chkAutoBackup.Checked = settings.AutoBackup;
+
         if (!string.IsNullOrWhiteSpace(_initialItem))
             _txtItem.Text = _initialItem;
 
@@ -301,6 +304,14 @@ public sealed partial class MainForm : Form
     {
         if (_busy) return;
 
+        // 编辑期间重新扫描会把表格与详情重建，缓冲里的内容就没了
+        if (_edit is not null && !silent)
+        {
+            MessageBox.Show(this, "正在编辑 JSON，请先「保存修改」或「取消编辑」，再重新扫描。",
+                "编辑未结束", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
         var path = _txtPath.Text.Trim().Trim('"');
         if (path.Length == 0)
         {
@@ -375,10 +386,15 @@ public sealed partial class MainForm : Form
         _pageTool.Text = "③ 作为工具";
         _pageDefinition.Text = "④ 物品定义";
 
-        if (report.Records.Count == 0)
+        // 表格清空后选中行没了，按钮必须跟着禁用，否则会拿旧行的路径去备份
+        UpdateEditButtons();
+
+        // 只有「配方和物品定义都为空」才算真的没东西可看：
+        // 有些 mod 只提供 auto-mapped 定义、不带任何配方，那种情况照样要能查。
+        if (report.Records.Count == 0 && report.Definitions.Count == 0)
         {
             _txtDetail.Text = BuildEmptyReport(report);
-            SetStatus("没有解析到任何蓝图。", Color.Firebrick);
+            SetStatus("没有解析到任何蓝图或物品定义。", Color.Firebrick);
 
             if (!silent)
             {
@@ -586,21 +602,46 @@ public sealed partial class MainForm : Form
     /// </summary>
     private void ShowDetail(DataGridView grid)
     {
-        var row = grid.CurrentRow?.DataBoundItem as IDetailRow;
+        // 编辑期间绝不改写文本框：Buffer 里是用户还没保存的内容
+        if (_edit is not null) return;
 
-        // 多选（Ctrl+点击）时 CurrentRow 仍指向锚点行；万一为空就退回第一条选中行
-        if (row is null && grid.SelectedRows.Count > 0)
-            row = grid.SelectedRows[0].DataBoundItem as IDetailRow;
-
-        if (row is null) return;
+        var row = CurrentRow(grid);
+        if (row is null)
+        {
+            UpdateEditButtons();
+            return;
+        }
 
         var text = row.BuildDetailText();
 
         // 同一条内容不重复渲染：选中变化与鼠标点击会先后触发本方法，
         // 不去重的话详情框的滚动位置会被连续两次重置，读长 JSON 时很难受。
-        if (_txtDetail.Text == text) return;
+        if (_txtDetail.Text != text) SetDetailText(text);
 
-        SetDetailText(text);
+        UpdateEditButtons();
+    }
+
+    /// <summary>当前选中行的详情对象；多选时优先当前行，退而取第一条选中行。</summary>
+    private static IDetailRow? CurrentRow(DataGridView grid)
+    {
+        var row = grid.CurrentRow?.DataBoundItem as IDetailRow;
+        if (row is null && grid.SelectedRows.Count > 0)
+            row = grid.SelectedRows[0].DataBoundItem as IDetailRow;
+
+        return row;
+    }
+
+    /// <summary>按「有没有选中行 / 是否在编辑」刷新三个按钮的可用状态。</summary>
+    private void UpdateEditButtons()
+    {
+        var row = CurrentRow(ActiveGrid());
+        var locatable = row is not null &&
+                        !string.IsNullOrEmpty(row.ContainerPath) &&
+                        !string.IsNullOrEmpty(row.EntryPath);
+
+        _btnEdit.Enabled = _edit is not null || (locatable && row!.EditableJson.Length > 0);
+        _btnSaveEdit.Enabled = _edit is not null;
+        _btnBackup.Enabled = _edit is not null ? true : row is not null && !string.IsNullOrEmpty(row.ContainerPath);
     }
 
     private void SetDetailText(string text)
@@ -628,6 +669,8 @@ public sealed partial class MainForm : Form
 
         if (grid.Rows.Count == 0)
         {
+            UpdateEditButtons();
+
             // 空页签：明确说明这一页没有结果，
             // 而不是继续显示别的页签里的蓝图（那会被误读成这一页的内容）。
             if (_outcome is { IsEmpty: false })
@@ -689,6 +732,180 @@ public sealed partial class MainForm : Form
         {
             MessageBox.Show(this, "复制到剪贴板失败：" + ex.Message, "剪贴板",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // 备份与就地修改
+    // ────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 一次编辑会话。记下「改的是哪个容器的哪个条目」以及原文，
+    /// 这样保存时不必依赖当前选中行 —— 万一表格状态变了也不会写错文件。
+    /// </summary>
+    private sealed record EditSession(string ContainerPath, string EntryPath, string OriginalText, IDetailRow Row);
+
+    private EditSession? _edit;
+
+    private void OnAutoBackupChanged(object? sender, EventArgs e) => SaveSettings();
+
+    private void OnBackupClick(object? sender, EventArgs e)
+    {
+        var row = CurrentRow(ActiveGrid());
+        if (row is null || string.IsNullOrEmpty(row.ContainerPath))
+        {
+            SetStatus("请先在左侧选中一行，再备份它所属的 modcomponent。", Color.Firebrick);
+            return;
+        }
+
+        try
+        {
+            var path = ModBackup.Create(row.ContainerPath);
+            SetStatus($"已备份到 {path}", Color.ForestGreen);
+
+            MessageBox.Show(this, $"已备份：\n\n{path}", "备份完成",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"备份失败：\n\n{ex.Message}", "备份失败",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            SetStatus("备份失败：" + ex.Message, Color.Firebrick);
+        }
+    }
+
+    private void OnEditClick(object? sender, EventArgs e)
+    {
+        if (_edit is not null)
+        {
+            CancelEdit();
+            return;
+        }
+
+        var row = CurrentRow(ActiveGrid());
+        if (row is null || string.IsNullOrEmpty(row.ContainerPath) || string.IsNullOrEmpty(row.EntryPath))
+        {
+            SetStatus("请先在左侧选中一行，再编辑它对应的 JSON。", Color.Firebrick);
+            return;
+        }
+
+        _edit = new EditSession(row.ContainerPath, row.EntryPath, row.EditableJson, row);
+
+        // 冻结左侧表格：编辑期间切换条目会把缓冲里的内容冲掉。
+        // 与其做「切换前弹窗问是否保存」那套，不如让这段时间根本切不动，行为更好预期。
+        _tabs.Enabled = false;
+        _txtDetail.ReadOnly = false;
+        _txtDetail.BackColor = Color.FromArgb(255, 252, 235);   // 淡黄 = 编辑中
+        _txtDetail.Text = row.EditableJson;
+        _txtDetail.SelectionStart = 0;
+        _txtDetail.ScrollToCaret();
+
+        _btnEdit.Text = "取消编辑";
+        UpdateEditButtons();
+
+        var merged = row is SearchRow { Records.Count: > 1 } sr
+            ? $"（该行合并了 {sr.Records.Count} 份同名蓝图，改动写入第一份）"
+            : "";
+
+        SetStatus($"编辑中：{Path.GetFileName(_edit.ContainerPath)} :: {_edit.EntryPath}{merged}", Color.DarkOrange);
+    }
+
+    private void CancelEdit()
+    {
+        if (_edit is null) return;
+
+        _edit = null;
+        ExitEditMode();
+        ShowDetail(ActiveGrid());
+        SetStatus("已取消编辑，没有写入任何文件。", Color.DimGray);
+    }
+
+    private void ExitEditMode()
+    {
+        _tabs.Enabled = true;
+        _txtDetail.ReadOnly = true;
+        _txtDetail.BackColor = Color.White;
+        _btnEdit.Text = "编辑 JSON";
+        UpdateEditButtons();
+    }
+
+    private async void OnSaveEditClick(object? sender, EventArgs e)
+    {
+        if (_edit is null) return;
+
+        var session = _edit;
+        var text = _txtDetail.Text;
+
+        if (text == session.OriginalText)
+        {
+            CancelEdit();
+            SetStatus("内容没有变化，未写入任何文件。", Color.DimGray);
+            return;
+        }
+
+        if (!IsValidJson(text, out var jsonError))
+        {
+            var answer = MessageBox.Show(this,
+                "这段 JSON 解析不了：\n\n" + jsonError +
+                "\n\n仍然保存吗？游戏大概率会读不出这条配方。",
+                "JSON 语法有问题", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+
+            if (answer != DialogResult.Yes) return;
+        }
+
+        string? backupPath = null;
+
+        try
+        {
+            if (_chkAutoBackup.Checked)
+                backupPath = ModBackup.Create(session.ContainerPath);
+
+            ModComponentWriter.SaveEntry(session.ContainerPath, session.EntryPath, text);
+        }
+        catch (Exception ex)
+        {
+            var extra = backupPath is null
+                ? ""
+                : $"\n\n原文件已经备份到：\n{backupPath}\n（写入没成功，原 modcomponent 未被改动）";
+
+            MessageBox.Show(this, "写入失败：\n\n" + ex.Message + extra, "保存修改失败",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+
+            SetStatus("保存失败：" + ex.Message, Color.Firebrick);
+            return;
+        }
+
+        _edit = null;
+        ExitEditMode();
+
+        SetStatus(backupPath is null
+                ? $"已写入 {session.EntryPath}（未备份）。正在重新扫描…"
+                : $"已写入 {session.EntryPath}，备份：{Path.GetFileName(backupPath)}。正在重新扫描…",
+            Color.ForestGreen);
+
+        // 改完必须重新解析：索引里还是旧的原料/工具，界面会显示改了但没生效的假象
+        await ScanAsync(silent: true).ConfigureAwait(true);
+    }
+
+    private static bool IsValidJson(string text, out string error)
+    {
+        try
+        {
+            using var _ = JsonDocument.Parse(text, new JsonDocumentOptions
+            {
+                AllowTrailingCommas = true,
+                CommentHandling = JsonCommentHandling.Skip,
+                MaxDepth = 128
+            });
+
+            error = string.Empty;
+            return true;
+        }
+        catch (JsonException ex)
+        {
+            error = ex.Message;
             return false;
         }
     }
@@ -755,7 +972,7 @@ public sealed partial class MainForm : Form
     private static string BuildEmptyReport(ScanReport report)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("没有解析到任何蓝图。");
+        sb.AppendLine("没有解析到任何蓝图或物品定义。");
         sb.AppendLine();
         sb.AppendLine($"解析到的根目录：{report.ResolvedModRoot}");
         sb.AppendLine();
@@ -830,6 +1047,9 @@ public sealed partial class MainForm : Form
         public bool IncludeSubFolders { get; set; } = true;
         public bool MergeDuplicates { get; set; } = true;
         public int MatchModeIndex { get; set; }
+
+        /// <summary>「保存修改」前是否自动备份原 modcomponent。默认开 —— 这是唯一会覆盖用户文件的操作。</summary>
+        public bool AutoBackup { get; set; } = true;
     }
 
     /// <summary>设置文件名。带上程序名，避免和别的工具挤在同一目录时互相覆盖。</summary>
@@ -865,7 +1085,8 @@ public sealed partial class MainForm : Form
                 LastPath = _txtPath.Text.Trim(),
                 IncludeSubFolders = _chkSubFolders.Checked,
                 MergeDuplicates = _chkMerge.Checked,
-                MatchModeIndex = _cmbMode.SelectedIndex
+                MatchModeIndex = _cmbMode.SelectedIndex,
+                AutoBackup = _chkAutoBackup.Checked
             };
 
             File.WriteAllText(SettingsFile, JsonSerializer.Serialize(settings,

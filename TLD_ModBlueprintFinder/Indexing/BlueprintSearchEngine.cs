@@ -68,6 +68,16 @@ public sealed class SearchRow : IDetailRow
 
     public string SourceKindText => Primary.SourceKind == BlueprintSourceKind.Recipe ? "食谱" : "蓝图";
 
+    // ── 就地编辑用的定位信息（合并了多份副本时只对代表那一份生效）──
+
+    public string ContainerPath => Primary.ContainerPath;
+
+    public string EntryPath => Primary.EntryPath;
+
+    public string EditableJson => Primary.RawJson;
+
+    public string EditTitle => $"{Primary.DisplayName}（{Primary.ModName}）";
+
     public string DuplicateText => Records.Count > 1 ? $"x{Records.Count}" : "";
 
     public string QualityText => Quality switch
@@ -218,15 +228,17 @@ public sealed class BlueprintSearchEngine
         var query = (rawQuery ?? string.Empty).Trim();
         var outcome = new SearchOutcome { Query = query, Mode = mode };
 
-        if (Index.Count == 0)
-        {
-            outcome.Notes.Add("尚未加载任何蓝图，请先选择游戏路径并点击「扫描」。");
-            return outcome;
-        }
-
         if (query.Length == 0)
         {
             outcome.Notes.Add("请输入物品 ID（例如 GEAR_AcornShelled）。");
+            return outcome;
+        }
+
+        // 只有一条配方都没有、也没有任何物品定义时才算「没加载」。
+        // 有些 mod 只提供 auto-mapped 定义、不带配方，那种情况仍然要能查到物品定义。
+        if (Index.Count == 0 && (Definitions is null || Definitions.Count == 0))
+        {
+            outcome.Notes.Add("尚未加载任何蓝图或物品定义，请先选择游戏路径并点击「扫描」。");
             return outcome;
         }
 

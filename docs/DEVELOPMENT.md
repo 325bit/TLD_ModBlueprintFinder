@@ -3,7 +3,7 @@
 > 玩家向的安装与使用说明见 [../README.md](../README.md)。
 > 本文件写给要改代码或要做二次开发的人：数据格式、字段映射、分层设计、踩过的坑。
 
-针对《漫漫长夜》(The Long Dark) + ModComponent 生态的只读检索工具：**输入一个物品 ID，双向列出「怎么做出它」「它能用来做什么」，并贴出它自己的 JSON 定义。**
+针对《漫漫长夜》(The Long Dark) + ModComponent 生态的检索工具：**输入一个物品 ID，双向列出「怎么做出它」「它能用来做什么」，贴出它自己的 JSON 定义，并能就地把这两类 JSON 改回 modcomponent。**
 
 装了四十多个 modcomponent 之后，想知道 `GEAR_ScrapMetal` 到底能做什么，只能一个个 zip 解压翻 JSON。这个工具做掉这件事，并给出四组互不混淆的答案：
 
@@ -49,7 +49,7 @@ AHandyToolbox.modcomponent  (ZIP)
 
 | | ModComponentExtractor | 本工具 |
 | --- | --- | --- |
-| 目的 | 解包 / 重打包 mod | 只读检索 |
+| 目的 | 解包 / 重打包 mod | 检索（可选就地改单条 JSON） |
 | ZIP 处理 | SharpZipLib `FastZip` | BCL `System.IO.Compression.ZipArchive` |
 | 是否落盘 | 解压成目录 | **完全不落盘**，内存中直读条目 |
 | 依赖 | SharpZipLib | 零第三方依赖 |
@@ -262,6 +262,8 @@ TLD_ModBlueprintFinder/                ← 仓库根目录
     │   └── ItemDefinitionIndex.cs     IDetailRow 接口 + 定义按文件名反推 ID
     ├── Export/
     │   └── CsvExporter.cs             带 BOM 的 UTF-8 CSV
+    ├── Editing/
+    │   └── ModBackup.cs               modcomponent 备份 + 条目写回（纯 BCL，可离线测）
     └── Ui/
         ├── MainForm.Ui.cs             控件与列定义（code-only，无 .resx）
         └── MainForm.cs                事件、扫描、检索、设置持久化
@@ -351,6 +353,7 @@ GUI 正常启动并在自己旁边生成 `TLD_ModBlueprintFinder_settings.json`�
    额外条件（煤油/火药/照明/技能等级）和**原始 JSON**；物品定义页签显示的是物品自身的 JSON。
 5. **导出 CSV**（四组结果一次导出，UTF-8 带 BOM，Excel 直接开）或 **复制**详情到剪贴板。
    物品定义行沿用同一套列，末尾多一列 `物品定义JSON`（配方行该列为空）。
+6. **备份 / 就地改 JSON**：详情栏第二排按钮，详见 §10。
 
 ### 命令行模式
 
@@ -414,10 +417,13 @@ TLD_ModBlueprintFinder.exe --path "F:\...\TheLongDark" --item GEAR_ScrapMetal
 - **不包含原版配方**。游戏本体的蓝图是 `ScriptableObject`，打包在 `tld_Data` 的资产里，不在任何 `modcomponent` 中。
   因此查原版物品可能得到「无匹配」——工具会在无结果时明确说明这一点，而不是假装没有配方。
   需要覆盖原版的话，得另行解析游戏资产，属于另一个工程。
-- **只读**。不写 `Mods`、不写存档。唯一的写操作是**程序所在目录**的 `TLD_ModBlueprintFinder_settings.json`
-  （记住上次路径与三个勾选项）和你主动导出的 CSV。
-  注意「程序所在目录」这层含义：把 exe 放进游戏根目录时，这份配置就会落在游戏目录里，
-  所以 README 里明确建议别放进去。要彻底不碰游戏目录，也可以改回 `ApplicationData`。
+- **默认只读，写操作全在用户点按钮之后**。扫描、检索、导出都不会碰 `Mods`。
+  会写文件的有三处：
+  1. 程序所在目录的 `TLD_ModBlueprintFinder_settings.json`（记住上次路径与四个勾选项）；
+  2. 程序所在目录 `TLDMBF_modcomponent_backup\` 下的备份（点「备份」或勾了自动备份时点「保存修改」）；
+  3. 用户自己点「保存修改」后写回的 `.modcomponent`（详见 §10）。
+  注意 1、2 的「程序所在目录」含义：把 exe 放进游戏根目录时，这两样都会落在游戏目录里，
+  所以 README 里明确建议别放进去。要彻底不碰游戏目录，可以把配置改回 `ApplicationData`。
   路径取 `AppContext.BaseDirectory` 而不是 `Directory.GetCurrentDirectory()`：后者会被快捷方式的
   「起始位置」和命令行启动时的工作目录改写，配置会散落到各处；`BaseDirectory` 在单文件发布下也稳定指向 exe 同目录。
 - **exe 放在只读位置时不报错也不落盘**：`SaveSettings()` 吞掉异常，代价是下次启动不记得上次路径。
@@ -458,3 +464,82 @@ TLD_ModBlueprintFinder.exe --path "F:\...\TheLongDark" --item GEAR_ScrapMetal
 - 渲染前比对文本去重，避免连续触发把详情框的滚动位置弹回顶部。
 
 完整分析、复现步骤、回归用例见 [BUG-001-detail-switch.md](BUG-001-detail-switch.md)。
+
+---
+
+## 10. 备份与就地修改
+
+界面上的四个按钮（详情栏第二排）：编辑 JSON / 保存修改 / 备份该 modcomponent / 自动备份。
+代码在 `Editing/ModBackup.cs`（备份 + 写回，纯 BCL，可脱离 WinForms 单独测）与 `Ui/MainForm.cs`（编辑态）。
+
+### 10.1 备份
+
+```
+<程序目录>\TLDMBF_modcomponent_backup\<mod名>.modcomponent-<yyyyMMdd_HHmmss>
+```
+
+- **时间戳做后缀而不是建时间目录**：同一 mod 的历次备份在资源管理器里紧挨着排，
+  一眼能看出改了几次；用目录就得逐层点进去。
+- 同名同秒重复备份（连点两下按钮）→ 追加 `-2`、`-3`，**绝不覆盖已有备份**。
+- 源是解压目录形式的 mod → 备份成同名**目录**（递归复制），命名规则相同。
+- 源不是 `.modcomponent` 扩展名（少数 mod 用 `.zip`）→ 备份里保留扩展名，免得看不出格式。
+- 备份就是整包字节复制，实测 md5 与原包一致；还原时把文件改回 `xxx.modcomponent` 丢回 `Mods` 即可。
+
+### 10.2 为什么是「重写整包」而不是原地改
+
+ZIP 没有原地替换条目的能力，`ZipArchiveMode.Update` 会把整个档案读进内存再整份写回，同样不是增量。
+所以写入走三步：
+
+```
+读原包 → 逐条复制到 <name>.<guid>.tmp（目标条目换新内容）→ File.Move 覆盖原包
+```
+
+- 好处：**任何时刻原包都是完整的**。中途失败只会留下一个 tmp，下次写会重用它，不会出现「改了一半、
+  游戏读不了」的包。
+- 目录条目（`auto-mapped/` 这种以 `/` 结尾、长度为 0 的）必须原样复制，
+  否则某些解包工具会看不到这些空目录。
+- 已验证：重写后条目数不变，**只有目标条目的内容哈希变化**，其余条目内容逐条比对一致。
+- 代价：整包重新压缩一遍。几十 MB 的容器要一两秒，界面在这期间是阻塞的（单文件工具，可接受）。
+
+### 10.3 编码与 BOM
+
+统一按 UTF-8 写；原条目带 BOM 就保留 BOM，否则不写。改的是文本，不该顺手改掉原作者的编码习惯。
+
+### 10.4 编辑态：为什么把左侧表格冻住
+
+`_edit` 不为 null 时：
+
+- `_tabs.Enabled = false` —— 编辑期间切不了页签、点不了别的行；
+- 详情框 `ReadOnly = false` 并换成淡黄底，按钮文案变「取消编辑」；
+- `ShowDetail()` 第一行就是 `if (_edit is not null) return;` —— 双保险，防止任何残留事件把缓冲冲掉。
+
+没有做「切换前弹窗问是否保存」那一套：状态机会复杂一个数量级，而用户照样可能点错。
+让这段时间根本切不动，行为更好预期，代价只是编辑时少看一眼列表。
+
+保存流程：
+
+```
+JSON 校验 →（勾了自动备份就备份）→ 写回容器 → 退出编辑态 → 全量重扫 → 自动重查
+```
+
+**必须重扫而不是局部更新**：索引里存的是解析后的原料/工具/产物，只换文本不重建索引，
+界面会显示「明明改了却没生效」。
+
+### 10.5 JSON 校验
+
+用 `JsonDocument.Parse` + `AllowTrailingCommas` + `Skip` 注释，与解析器同一套宽容策略。
+解析失败弹 Yes/No 并默认 No，但**允许硬存**：有些 mod 用游戏自己的宽松格式，
+一刀切挡死反而碍事。校验只保证「语法能被 .NET 读懂」，不保证游戏认得。
+
+### 10.6 已知取舍
+
+- 合并同名蓝图的行（一份蓝图有多个副本）只写第一份（`Primary`），状态栏会写明合并了几份。
+- 备份不会自动清理，反复改同一个 mod 会一直积累。
+- 游戏运行时写会失败（文件被占用），错误直接弹出来，原包不动。
+- 写回后 zip 内所有条目的压缩结果都会变，`git` 之类按字节比较的版本控制会显示整包变动 —— 这是重写的必然结果。
+
+### 10.7 怎么自测这段
+
+`Editing/ModBackup.cs` 不依赖 WinForms，可以建控制台桩工程链接它跑真实容器（参考
+`projects/ContainerSorterStub` 的做法）。值得覆盖的点：备份命名与字节一致、写回后条目数不变、
+非目标条目哈希不变、BOM 保持、写不存在的条目要报错且原包仍可读、目录型容器走直接写文件。

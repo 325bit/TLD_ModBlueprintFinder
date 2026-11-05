@@ -9,3 +9,4 @@ publish/
 # 本地运行产生的用户配置（exe 同目录）
 *_settings.json
 dist/
+TLDMBF_modcomponent_backup/

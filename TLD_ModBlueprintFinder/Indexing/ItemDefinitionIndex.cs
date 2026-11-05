@@ -11,6 +11,20 @@ public interface IDetailRow
     string QualityText { get; }
 
     string BuildDetailText();
+
+    // ── 就地编辑用的定位信息 ──
+
+    /// <summary>所属 modcomponent 的完整路径（备份、写回都以它为准）。</summary>
+    string ContainerPath { get; }
+
+    /// <summary>容器内的条目路径，如 blueprints/AcornShelled.json。</summary>
+    string EntryPath { get; }
+
+    /// <summary>可编辑的原始 JSON 文本；为空表示这一行没有可写的内容。</summary>
+    string EditableJson { get; }
+
+    /// <summary>状态栏与对话框里用的简短标题，例如「AcornShelled（AHandyToolbox）」。</summary>
+    string EditTitle { get; }
 }
 
 /// <summary>「这份定义对应哪个 ID」的可信度。</summary>
@@ -91,6 +105,12 @@ public sealed class DefinitionRow : IDetailRow
     public string ModName => Definition.ModName;
 
     public string EntryPath => Definition.EntryPath;
+
+    public string ContainerPath => Definition.ContainerPath;
+
+    public string EditableJson => Definition.JsonText;
+
+    public string EditTitle => $"{ItemId}（{Definition.ModName}）";
 
     public string SizeText => Definition.SizeBytes < 1024
         ? $"{Definition.SizeBytes} B"

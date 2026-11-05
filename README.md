@@ -1,6 +1,6 @@
 # 漫漫长夜mod配方搜索器 · TLD Mod Blueprint Finder
 
-![version](https://img.shields.io/badge/version-1.2.0-informational)
+![version](https://img.shields.io/badge/version-1.3.0-informational)
 
 ![game](https://img.shields.io/badge/The%20Long%20Dark-2.55-success)
 
@@ -37,8 +37,22 @@
 | 其他 mod 引用  | 别的 mod 的配方引用了它，通常也是同一件物品  |
 | 仅文件名       | 没有任何配方引用过，只按文件名对上，前缀不确定   |
 
-大小写也当回事：`GEAR_sugara`（某个 mod 加的糖）和 `GEAR_SugarA`（原版糖）去掉前缀后都是 `sugara`。  
-工具优先挑大小写完全一致的，不一致时会在「判定依据」里标一句「大小写不同」。
+大小写：`GEAR_sugara`（某个 mod 加的糖）和 `GEAR_SugarA`（原版糖）去掉前缀后都是 `sugara`。工具优先挑大小写完全一致的，不一致时会在「判定依据」里标一句「大小写不同」。
+
+## 修改与备份
+
+选中左侧任意一行，右侧详情栏上有一排按钮：
+
+| 按钮              | 作用                                                    |
+| --------------- | ----------------------------------------------------- |
+| 编辑 JSON         | 把这一条的原始 JSON 变成可编辑状态（配方和物品定义都能改），改完点「保存修改」 |
+| 保存修改            | 校验 JSON 后写回 modcomponent；解析不过会先问你要不要硬存                 |
+| 备份该 modcomponent | 只备份当前行所属的 modcomponent，不做任何修改                          |
+| 自动备份            | 勾选时「保存修改」会先备份一份再写（默认勾选，状态会记住）                         |
+
+备份放在 exe 同目录的 `TLDMBF_modcomponent_backup\`，文件名是 `<mod名>.modcomponent-<年月日_时分秒>`，改多少次都不会互相覆盖。整个容器是复制过去的，想还原直接把备份改回 `xxx.modcomponent` 丢回 `Mods` 即可。
+
+写入的做法是把 .modcomponent 整个重写一遍再替换，中途失败原包不会被动过。但还是**建议先关掉游戏**：游戏占着文件时写不进去，工具会直接报错；改完也要重启游戏，modcomponent 才会被重新加载。
 
 ## 界面
 
@@ -56,6 +70,12 @@
   </tr>      
   <tr>      
     <td align="center" colspan="2"><code>GEAR_metallighter</code>：右侧直接贴出它在 <code>auto-mapped/</code> 里的 JSON</td>      
+  </tr>      
+  <tr>      
+    <td align="center" colspan="2"><img src="docs/img/screenshot-edit.png" alt="编辑 JSON"></td>      
+  </tr>      
+  <tr>      
+    <td align="center" colspan="2">「编辑 JSON」：直接改这一条，点「保存修改」写回 modcomponent；勾了自动备份会先留一份</td>      
   </tr>      
 </table>
 

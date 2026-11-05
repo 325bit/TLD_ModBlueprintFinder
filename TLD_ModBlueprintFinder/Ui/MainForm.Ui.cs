@@ -41,6 +41,12 @@ public sealed partial class MainForm
     private readonly Button _btnExport = new();
     private readonly Button _btnCopy = new();
 
+    // ── 备份 / 就地编辑 ──
+    private readonly Button _btnEdit = new();
+    private readonly Button _btnSaveEdit = new();
+    private readonly Button _btnBackup = new();
+    private readonly CheckBox _chkAutoBackup = new();
+
     /// <summary>
     /// 逻辑像素 → 设备像素。
     /// 构造函数阶段（句柄未创建）直接返回逻辑值：此时 AutoScaleMode.Dpi 还没生效，
@@ -235,6 +241,54 @@ public sealed partial class MainForm
         detailHeader.Controls.Add(_btnExport);
         detailHeader.Controls.Add(_btnCopy);
 
+        // ── 第二行：备份与就地编辑 ──
+        // 单独一行是因为这一排按钮比上面那排长，塞进标题行会把「详情 / 原始 JSON」挤没。
+        var editBar = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = S(36),
+            Padding = new Padding(S(6), S(2), S(4), S(2))
+        };
+
+        var editFlow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            WrapContents = false,
+            AutoScroll = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            Margin = Padding.Empty
+        };
+
+        _btnEdit.Text = "编辑 JSON";
+        _btnEdit.AutoSize = true;
+        _btnEdit.Margin = new Padding(0, S(2), S(6), 0);
+        _btnEdit.Enabled = false;
+        _btnEdit.Click += OnEditClick;
+
+        _btnSaveEdit.Text = "保存修改";
+        _btnSaveEdit.AutoSize = true;
+        _btnSaveEdit.Margin = new Padding(0, S(2), S(6), 0);
+        _btnSaveEdit.Enabled = false;
+        _btnSaveEdit.Click += OnSaveEditClick;
+
+        _btnBackup.Text = "备份该 modcomponent";
+        _btnBackup.AutoSize = true;
+        _btnBackup.Margin = new Padding(0, S(2), S(6), 0);
+        _btnBackup.Enabled = false;
+        _btnBackup.Click += OnBackupClick;
+
+        _chkAutoBackup.Text = "自动备份";
+        _chkAutoBackup.Checked = true;
+        _chkAutoBackup.AutoSize = true;
+        _chkAutoBackup.Margin = new Padding(0, S(6), 0, 0);
+        _chkAutoBackup.CheckedChanged += OnAutoBackupChanged;
+
+        editFlow.Controls.Add(_btnEdit);
+        editFlow.Controls.Add(_btnSaveEdit);
+        editFlow.Controls.Add(_btnBackup);
+        editFlow.Controls.Add(_chkAutoBackup);
+        editBar.Controls.Add(editFlow);
+
         _txtDetail.Dock = DockStyle.Fill;
         _txtDetail.ReadOnly = true;
         _txtDetail.BackColor = Color.White;
@@ -245,6 +299,7 @@ public sealed partial class MainForm
         _txtDetail.Text = "在左侧任意结果行上单击，这里会显示该蓝图的完整原料清单与原始 JSON。";
 
         detailPanel.Controls.Add(_txtDetail);
+        detailPanel.Controls.Add(editBar);
         detailPanel.Controls.Add(detailHeader);
         _split.Panel2.Controls.Add(detailPanel);
 

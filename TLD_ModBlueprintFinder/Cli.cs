@@ -70,9 +70,9 @@ internal static class Cli
 
         PrintScanSummary(report);
 
-        if (report.Records.Count == 0)
+        if (report.Records.Count == 0 && report.Definitions.Count == 0)
         {
-            Console.Error.WriteLine("没有解析到任何蓝图。");
+            Console.Error.WriteLine("没有解析到任何蓝图或物品定义。");
             return 4;
         }
 
