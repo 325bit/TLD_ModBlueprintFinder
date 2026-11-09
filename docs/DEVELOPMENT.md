@@ -3,10 +3,11 @@
 > Language: English only - code comments, `docs/` and CHANGELOG.
 > Player-facing guide: [../README.md](../README.md). Maintainer reading order: this file, then the bug notes.
 
-Version 1.5.0 · target game 2.55 · .NET 8 (`net8.0-windows`, WinForms) · no third-party dependencies.
+Version 1.5.1 · target game 2.55 · .NET 8 (`net8.0-windows`, WinForms) · no third-party dependencies.
 
-Companion doc: [BUG-001-detail-switch.md](BUG-001-detail-switch.md) - why the shared detail panel used to keep
-showing another tab's row. Comment migration map: §11.
+Companion docs: [BUG-001-detail-switch.md](BUG-001-detail-switch.md) - why the shared detail panel used to keep
+showing another tab's row; [BUG-002-unsaved-prompt.md](BUG-002-unsaved-prompt.md) - why untouched CRLF entries
+were reported as edited. Comment migration map: §11.
 
 The tool searches the `modcomponent` files a modded The Long Dark install carries. Give it one item ID
 and it answers six questions that never mix:
@@ -333,6 +334,11 @@ selection is cleared but the editor keeps its text, and clearing the filter find
 The main window instead freezes the left table while one row is being edited (`_tabs.Enabled = false`,
 `ShowDetail()` returns early). A "save before switching?" state machine would be an order of magnitude more
 complex and users can still click wrong; making the switch impossible is far more predictable.
+
+The baseline behind the gate must be read from the control, not from the file. `RichTextBox.Text` reports LF
+for every line break while the file usually holds CRLF, so a file-sourced baseline marks 75% of entries as
+edited the moment they load. Both editors therefore set `_original` / `EditSession.OriginalText` to
+`editor.Text` after assigning the content. See BUG-002 for the measurement.
 
 ## 8. Settings
 

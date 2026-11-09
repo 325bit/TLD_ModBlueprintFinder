@@ -839,8 +839,6 @@ public sealed partial class MainForm : Form
             return;
         }
 
-        _edit = new EditSession(row.ContainerPath, row.EntryPath, row.EditableJson, row);
-
         // Freezes the left table: switching rows during an edit would discard the buffer. Rather than asking
         // "save before switching?", making the switch impossible is far more predictable.
         _tabs.Enabled = false;
@@ -849,6 +847,10 @@ public sealed partial class MainForm : Form
         _txtDetail.Text = row.EditableJson;
         _txtDetail.SelectionStart = 0;
         _txtDetail.ScrollToCaret();
+
+        // The baseline is what the editor holds, not the file text: RichTextBox returns LF for every line
+        // break, so a CRLF entry would look modified before the user touched a key.
+        _edit = new EditSession(row.ContainerPath, row.EntryPath, _txtDetail.Text, row);
 
         _btnEdit.Text = "取消编辑";
         UpdateEditButtons();

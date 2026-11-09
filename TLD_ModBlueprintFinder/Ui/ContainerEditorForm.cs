@@ -537,20 +537,17 @@ public sealed class ContainerEditorForm : Form
         {
             if (content is null)
             {
-                _original = "";
                 _editor.ReadOnly = true;
                 _editor.Text = "";
             }
             else if (content.IsBinary)
             {
-                _original = "";
                 _editor.ReadOnly = true;
                 _editor.Text = $"（这是一个二进制文件，{ArchiveEntry.FormatSize(content.SizeBytes)}。" +
                                 "编辑器只处理文本 JSON，这个条目不能在这里改。）";
             }
             else
             {
-                _original = content.Text;
                 _editor.ReadOnly = false;
                 _editor.Text = content.Text;
                 _editor.SelectionStart = 0;
@@ -558,6 +555,10 @@ public sealed class ContainerEditorForm : Form
             }
 
             _editor.BackColor = _editor.ReadOnly ? Color.FromArgb(246, 246, 246) : Color.White;
+
+            // The baseline must be what the editor actually holds, not the file text: RichTextBox returns
+            // LF for every line break, so a CRLF file would look edited the moment it is loaded.
+            _original = _editor.Text;
         }
         finally
         {
