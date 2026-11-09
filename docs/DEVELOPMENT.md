@@ -3,14 +3,15 @@
 > Language: English only - code comments, `docs/` and CHANGELOG.
 > Player-facing guide: [../README.md](../README.md). Maintainer reading order: this file, then the bug notes.
 
-Version 1.5.1 · target game 2.55 · .NET 8 (`net8.0-windows`, WinForms) · no third-party dependencies.
+Version 1.6.0 · target game 2.55 · .NET 8 (`net8.0-windows`, WinForms) · no third-party dependencies.
 
 Companion docs: [BUG-001-detail-switch.md](BUG-001-detail-switch.md) - why the shared detail panel used to keep
 showing another tab's row; [BUG-002-unsaved-prompt.md](BUG-002-unsaved-prompt.md) - why untouched CRLF entries
 were reported as edited. Comment migration map: §11.
 
-The tool searches the `modcomponent` files a modded The Long Dark install carries. Give it one item ID
-and it answers six questions that never mix:
+The tool searches the `modcomponent` files a modded The Long Dark install carries, plus the game's own
+recipes from a snapshot embedded in the exe (§2.5). Give it one item ID and it answers six questions that
+never mix:
 
 | Group | Question | Match field | Scope |
 | --- | --- | --- | --- |
@@ -20,6 +21,9 @@ and it answers six questions that never mix:
 | 4 as product (recipe) | Which dish has **this item** as its result | `CraftedResult` | `recipes/` |
 | 5 as ingredient (recipe) | Which dishes use **this item** as food | same as 2 | `recipes/` |
 | 6 item definition | What the item **itself** is (weight, decay, stack, burn) | file name under `auto-mapped/` | `auto-mapped/` |
+
+Every group holds two kinds of row: mod records and vanilla records. Vanilla rows are always sorted to the
+bottom of their group and are read-only (§2.5).
 
 Tools are kept out of the ingredient groups on purpose: a tool is not consumed, and listing it there reads
 as "bring a hammer to burn it". Blueprints and recipes are split because the JSON shape is the same but the
@@ -35,6 +39,12 @@ TLD_ModBlueprintFinder/                 repository root
 ├── LICENSE                             MIT
 ├── publish.bat                         one-click single-file publish -> dist\
 ├── dist/                               release artifact (not in git)
+├── data/                               vanilla snapshot, generated (see §2.5)
+│   ├── vanilla/blueprints/*.json       104 craftables in the modcomponent shape
+│   ├── vanilla/recipes/*.json          29 dishes in the modcomponent shape
+│   ├── vanilla/manifest.json           game build, counts, export time
+│   └── vanilla.zip                     the same tree, embedded into the exe
+├── tools/export_vanilla.py             reads the game's bundles, writes data/ (§2.5)
 ├── docs/                               this file, bug notes, screenshots
 └── TLD_ModBlueprintFinder/             project
     ├── TLD_ModBlueprintFinder.csproj
@@ -47,6 +57,7 @@ TLD_ModBlueprintFinder/                 repository root
     ├── Parsing/BlueprintParser.cs      JSON -> BlueprintRecord, including BlueprintData unwrapping
     ├── Parsing/ItemDefinitionParser.cs component list + raw text, trailing-comma tolerant
     ├── Parsing/ModScanner.cs           ZIP / folder walk, path resolution, entry classification
+    ├── Parsing/VanillaArchive.cs       reads the embedded vanilla.zip through the same parser
     ├── Indexing/BlueprintIndex.cs      three inverted tables + kindFilter + similar-ID suggestions
     ├── Indexing/BlueprintSearchEngine.cs  five groups, dedup, SearchRow
     ├── Indexing/ItemDefinitionIndex.cs IDetailRow + ID inference from file names
@@ -180,6 +191,53 @@ The third form is frequent enough (25 occurrences, mostly `Bountiful_Foraging`) 
 JSON is never mapped to strong types on purpose: component fields vary per mod, and showing the text as
 written is more useful (and can be pasted straight into someone else's mod).
 
+### 2.5 Vanilla snapshot (`data/vanilla.zip`)
+
+The game's own blueprints are not files: each one is a `BlueprintData` ScriptableObject inside an
+Addressables bundle (`Assets/ScriptableObjects/Gear/Blueprints/BLUEPRINT_*.asset`). Two consequences, and
+the second is why the tool ships data instead of reading the game at runtime:
+
+1. Reading them needs UnityPy plus a CAB index over all 533 bundles (~50 s, only interesting to a build).
+2. A released exe is one file. Teaching it to parse Unity bundles would add a large, game-version-fragile
+   dependency to every player's download to read data that changes only when the game itself updates.
+
+So `tools/export_vanilla.py` runs on the maintainer's machine, writes the same ModComponent JSON shape the
+mod components use (`blueprints/*.json`, `recipes/*.json`, plus `manifest.json` with the build string), zips
+it to `data/vanilla.zip` (60 KB) and the project embeds that zip as a resource. `VanillaArchive` unpacks it
+through **the same `BlueprintParser`** - one parser means the two sources cannot drift apart in field
+handling, and the export script only has to emit one shape.
+
+Re-run after a game update:
+
+```bat
+python tools/export_vanilla.py --game "F:/GameAbouts/The Long Dark/TheLongDark_2.55"
+```
+
+The script prints its own sanity numbers (`blueprints: 104 (decoration results 45), recipes: 29, failed: 0,
+weighted gear lines: 33`). Three field traps are silent - the export succeeds and every row still looks
+plausible - so they are recorded here rather than in the script alone:
+
+| Trap | What happens if ignored | Rule |
+| --- | --- | --- |
+| `m_CraftingResultType` picks the product field | all 45 furniture blueprints reported `GEAR_CougarWrap`, the stale prefab left in `m_CraftedResultGear` | `StandardGear` (0) -> `m_CraftedResultGear`; `Decoration` (1) -> `m_CraftedResultDecoration` |
+| `RequiredGearItem.m_Units` picks count vs weight | 33 lines carry `Units.Kilograms`, where `m_Count` is 0 and the amount sits in `m_Weight` | emit `{Item, Quantity, Units:"Kilograms"}` for those |
+| the fixed-point scale | 1e8 instead of 1e9 multiplies every requirement by ten: broth becomes 10 kg of meat, a pie 1.5 L of water | see §2.5.1 |
+
+Vanilla rows are **read-only by construction**: `BlueprintRecord.IsVanilla` is set by the archive loader,
+`ContainerPath` is empty (there is no file to write to), and `UpdateEditButtons` checks `IsVanilla` on top of
+the empty path so a future change to the container handling cannot quietly make them editable. The container
+editor stays available - it is not row-scoped - but opens on the first container while a vanilla row is
+selected, and its tooltip says so.
+
+#### 2.5.1 Fixed-point scale is 1e9, not 1e8
+
+`ItemWeight.m_Units` and `ItemLiquidVolume.m_Units` are `long` fixed point. The literal comes from the
+game's own static constructor, not from a tolerance test: `ItemLiquidVolume..cctor` (RVA `0x36482E0`) writes
+`Liter = 0x3B9ACA00` (1e9) and `Centiliter = 0x989680` (1e7). Cross-check with values a player can read off
+the crafting screen: broth needs 1.0 kg of meat and 1.5 L of water, a meat pie 0.5 kg of meat + 0.2 kg of
+flour + 0.15 L of water + 0.05 L of oil. All three land exactly there at 1e9 and are ten times too large at
+1e8 - the wrong scale does not look wrong per row, which is why it survived a full export undetected.
+
 ## 3. Pipeline: from a path to a rendered row
 
 ```
@@ -188,7 +246,8 @@ MainForm.ScanAsync
        ├─ ResolveInput          game root / Mods / single file -> containers
        ├─ ScanZip | ScanFolder  enumerate entries, size guard, decode
        ├─ BlueprintParser.ParseMany     -> BlueprintRecord[]
-       └─ ItemDefinitionParser.Parse    -> ItemDefinition[]
+       ├─ ItemDefinitionParser.Parse    -> ItemDefinition[]
+       └─ VanillaArchive.Load           embedded vanilla.zip -> BlueprintRecord[] (IsVanilla, §2.5)
   └─ BlueprintIndex + ItemDefinitionIndex     inverted tables built once per scan
   └─ BlueprintSearchEngine.Search             five groups + definitions
   └─ MainForm.ApplyReport                     bind rows, tabs, status, detail
@@ -205,9 +264,13 @@ game folder is the file system:
 | Direction | Path | When |
 | --- | --- | --- |
 | read | `<path>\Mods\**\*.modcomponent`, `*.zip`, extracted mod folders | scan, and every read in the container editor |
+| read | the `vanilla.zip` embedded in the exe | once per process, on the first scan |
 | write | `<program dir>\TLD_ModBlueprintFinder_settings.json` | after a scan / on close; failures are swallowed |
 | write | `<program dir>\TLDMBF_modcomponent_backup\<mod>.modcomponent-<stamp>` | "Back up", or "Save changes" with auto-backup on |
 | write | the `.modcomponent` the user edited | only on an explicit "Save changes" / editor action |
+
+The vanilla snapshot is read from the assembly, never from the game folder: a player can point the tool at any
+path, or at none, and the vanilla answers stay the same.
 
 `AppContext.BaseDirectory` is used instead of `Directory.GetCurrentDirectory()`: the latter is rewritten by
 a shortcut's "Start in" and by the shell, which would scatter the settings file. BaseDirectory also resolves
@@ -247,6 +310,11 @@ Match tiers, visualized as italics plus color plus tooltip:
 (42 of the 423 records share a name; `Bountiful_Foraging` and `DZ_Bountiful_Foraging` are two versions of one
 mod). The "mod" column lists every source and the detail panel shows each copy. Turn it off to inspect mod
 conflicts, one row per copy.
+
+**Vanilla rows never merge.** The dedup key is empty for them, so a mod blueprint and the vanilla blueprint it
+overrides stay two rows. Merging would print `SomeMod | <vanilla source>` in the source column and hide exactly the
+distinction the feature exists to show. Ordering is "mod first, vanilla after", applied before match quality:
+a vanilla row that matched exactly must not jump above the mod row that actually added the item.
 
 **Suggestions**: when nothing matches, candidate IDs are scored by bidirectional containment on the
 prefix-stripped name plus Levenshtein distance, so `Acorn` still finds `GEAR_Acorn`.
@@ -370,10 +438,14 @@ TLD_ModBlueprintFinder.exe --cli --path "<game root | Mods | one .modcomponent>"
 | `--no-subfolders` | do not recurse into subfolders |
 | `--no-folders` | skip extracted-folder mods |
 | `--temp` | also scan `_ModComponentTemp` |
+| `--no-vanilla` | do not load the embedded vanilla snapshot |
 | `--scan-only` | scan and print statistics only |
 | `--csv <path>` | export the result as CSV |
 
 Exit codes: `0` results found, `1` no match, `2` bad arguments, `3` scan failure, `4` nothing parsed.
+
+`--csv` appends one origin column at the end of the row: `MOD` for mod rows, the vanilla label otherwise.
+Existing columns keep their index, and the row order already puts mod results above vanilla ones.
 
 `_ModComponentTemp` is skipped by default: it holds the copies ModComponent unpacked, so scanning it
 double-counts. Enable it with `--temp` or `ScanOptions.IncludeModComponentTemp`.
@@ -400,6 +472,9 @@ The console code page can be GBK, and a WinExe has no console handle at all, whi
 | 13 | The left table is frozen while one row is edited | switching rows discards the unsaved buffer | §7.4 |
 | 14 | Settings use `AppContext.BaseDirectory` | config files scatter into the shortcut's working directory | §4 |
 | 15 | Parse failures degrade to a warning, never abort the scan | one malformed mod hides every other mod's blueprints | §2.4 |
+| 16 | Vanilla rows are read-only: `IsVanilla` gates the edit buttons on top of the empty container path | the game's own recipes look editable, and the only possible write target is a mod's file | §2.5 |
+| 17 | Vanilla is loaded even when the path holds no modcomponent | a wrong path silently hides data that does not depend on the path | §2.5 |
+| 18 | Vanilla never shares a dedup key with a mod row, and sorts after it | the override relationship, the one thing the row is for, disappears | §5 |
 
 ## 11. Comment migration map
 
@@ -434,6 +509,7 @@ Every change has a fixed set of places to update. Missing one is how a repo star
 | Anything removed from a comment | §11 migration map, one row per move |
 | Player-visible behaviour | README feature bullets (both blocks) |
 | Version number | `csproj` `<Version>` -> README badge -> header of this file, all three equal |
+| Game update | re-run `tools/export_vanilla.py`, rebuild (§2.5); the manifest's build string is what the UI reports |
 
 Language split: comments and everything under `docs/` are English; only `README.md` carries Chinese.
 
@@ -481,31 +557,38 @@ What has actually been checked, and how far:
 | Area | Status |
 | --- | --- |
 | Build | `dotnet build -c Release` and `-c Debug`, 0 warnings, 0 errors |
-| Scan | 46 containers, 423 blueprint records (16 recipes), 761 definitions, 480 item IDs, ~129 ms |
+| Scan | 45 containers, 414 mod blueprint records (15 recipes) + 133 vanilla records (104 blueprints, 29 recipes), 688 definitions, 480 item IDs, ~156 ms |
 | Search | Baselines below, reproduced on 2.55 |
+| Vanilla export | `tools/export_vanilla.py`: 533 bundles / 1431 CABs indexed in ~51 s, 104 blueprints + 29 recipes, 0 failures, 60 KB zip; row values cross-checked against the crafting screen (broth 1.0 kg meat + 1.5 L water) |
+| Vanilla read-only | GUI probe on a vanilla-only hit (`OBJ_Rustic_Stool_Prefab`): the edit / save / back-up buttons all report disabled and the detail panel starts with the read-only notice; the same probe on a mod hit (`GEAR_Hammer`) has edit and back-up enabled |
 | Write path | Console stub over real container copies: 38 cases (create / update / rename / delete / binary / path validation / folder containers) |
 | Container editor | End-to-end in a sandbox copy: create -> edit -> rename -> delete, archive re-read and `testzip()` after each step |
-| Single-file publish | CLI and GUI smoke test from `dist\` |
+| Single-file publish | CLI and GUI smoke test from `dist\`, including the embedded vanilla zip |
 
-Baseline queries (expected output with the 46-container corpus):
+Baseline queries (expected output with the 45-container corpus plus the 2.55 snapshot):
 
 | Command | Expect |
 | --- | --- |
-| `--item GEAR_ScrapMetal` | product 3, ingredient 28, tool 0, definitions 1 (contains-match on `knifescrapmetal`) |
-| `--item GEAR_Hammer` | product 1, ingredient 0, tool 26, definitions 2 (`blacksmithhammer`, `stonehammer`) |
+| `--item GEAR_ScrapMetal` | product 3, ingredient 44 (28 mod + 16 vanilla, all vanilla at the tail), tool 0, definitions 1 (contains-match on `knifescrapmetal`) |
+| `--item GEAR_Hammer` | product 1, ingredient 0, tool 33 (26 mod + 7 vanilla), definitions 2 (`blacksmithhammer`, `stonehammer`) |
 | `--item GEAR_sugara` | 5 recipe hits (2 products + 3 ingredients), 1 definition (`MoreMeds :: auto-mapped/sugara.json`), basis "same-mod reference" |
 | `--item GEAR_SugarA` | same definition, plus a "different case" mark - vanilla sugar has no JSON of its own |
 | `--item GEAR_Bones` | ingredient 3 (2 blueprints + 1 recipe), definitions 3 (`bones`, `orcabones1`, `orcabones2`) |
 | `--item GEAR_1firconefuel` | 0 recipe hits, 2 definitions, basis "file name only" - definitions without recipes are normal |
-| `--item GEAR_UncookedBroth` | group 4 has 1 row from `recipes/bonebroth.json`, ingredients include `POWDER_Salt 0.01 kg` and `LIQUID_WaterPotable 1.5 L` |
-| `--item GEAR_RawMeatBear` | group 2 has 3 rows, group 5 has 1 (`REC_BearStew`) - the groups do not overlap |
-| `--item GEAR_Acorn --mode exact` | product 1, ingredient 2 |
-| `--item GEAR_Acorn --mode fuzzy` | product 3 (the exact row is excluded) |
+| `--item GEAR_UncookedBroth` | group 4 has 2 rows: the mod's `recipes/bonebroth.json` (ingredients `POWDER_Salt 0.01 kg` / `LIQUID_WaterPotable 1.5 L`) and vanilla `recipes/dish_broth_a.json` after it |
+| `--item GEAR_RawMeatRabbit` | group 2 has 3 rows, group 5 has 6 (1 mod + 5 vanilla dishes) - the groups do not overlap |
+| `--item GEAR_RawMeatBear` | group 2 has 3 rows, group 5 has 2 (`REC_BearStew` + vanilla `dish_piepredator_a`) |
+| `--item GEAR_Acorn --mode exact` | product 1, ingredient 4 (2 mod + vanilla `gear_acornshelled_a` and `gear_fishinglurec_a`) |
+| `--item GEAR_Acorn --mode fuzzy` | product 7 (the exact row is excluded by the mode itself) |
+| `--item GEAR_CougarWrap` | exactly 1 row, `BLUEPRINT_GEAR_CougarWrap` - the vanilla blueprint, not the 45 furniture ones |
+| `--item OBJ_Rustic_Stool_Prefab` | 1 row: `BLUEPRINT_DECO_Stool`, a decoration product, read-only |
+| `--no-vanilla --item GEAR_RawMeatRabbit` | group 5 drops to 1 row |
 
 Self-check in four steps:
 
 1. `--scan-only` reports hundreds of blueprint records and a comparable number of definitions. Zero means the
-   `Mods` folder holds no `*.modcomponent`.
+   `Mods` folder holds no `*.modcomponent`. The vanilla line (the one with the game build) must still be non-zero - it does not depend on
+   the path, so a zero there means the embedded resource was not packaged.
 2. `--item GEAR_Hammer` group 3 is not zero, otherwise only part of the mods were indexed.
 3. Any row's raw JSON `CraftedResult` matches the "product" column - direct evidence that the field map is right.
 4. Any group 6 row shows only `Mod*Component` / `Mod*Behaviour` top-level keys. `Name` / `CraftedResult` there
@@ -513,9 +596,11 @@ Self-check in four steps:
 
 Known boundaries:
 
-- **Vanilla recipes are not covered.** Base-game blueprints are `ScriptableObject` assets inside `tld_Data`,
-   not part of any modcomponent, so a vanilla item can legitimately return nothing. The UI says so instead of
-   pretending there are no recipes.
+- **Vanilla covers blueprints and recipes, not item definitions.** The snapshot holds 104 craftables and 29
+  dishes; group 6 still only answers for `auto-mapped/` files, because per-item prefab components are not part
+  of the blueprint assets and exporting them would need a second, much larger pass.
+- **A vanilla decoration product is a prefab name** (`OBJ_Rustic_Stool_Prefab`, `CONTAINER_Rustic_Closet_C`),
+  not a `GEAR_` ID: furniture is placed, not carried, and the asset has no item ID to report.
 - **Read-only by default.** Scanning, searching and exporting never touch `Mods`; writes only happen after an
   explicit button and are listed in §4.
 - **DLL-only mods do not appear.** They ship no modcomponent.

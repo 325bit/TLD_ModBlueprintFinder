@@ -1,0 +1,30 @@
+{
+  "Name": "BLUEPRINT_GEAR_NoiseMaker_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_RecycledCan",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_Cloth",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "Workbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_NoiseMaker",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 30,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None",
+  "RequiredPowder": [
+    {
+      "Powder": "POWDER_Gunpowder",
+      "QuantityInKilograms": 0.1
+    }
+  ]
+}

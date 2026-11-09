@@ -1,0 +1,27 @@
+{
+  "Name": "BLUEPRINT_GEAR_ImprovisedCrampons",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_ScrapMetal",
+      "Count": 4
+    },
+    {
+      "Item": "GEAR_LeatherDried",
+      "Count": 2
+    }
+  ],
+  "RequiredTool": "",
+  "OptionalTools": [
+    "GEAR_HighQualityTools",
+    "GEAR_SimpleTools"
+  ],
+  "RequiredCraftingLocation": "Workbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_ImprovisedCrampons",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 240,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

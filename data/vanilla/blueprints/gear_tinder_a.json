@@ -1,0 +1,20 @@
+{
+  "Name": "BLUEPRINT_GEAR_Tinder_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Stick",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "Anywhere",
+  "RequiresLitFire": false,
+  "RequiresLight": false,
+  "CraftedResult": "GEAR_Tinder",
+  "CraftedResultCount": 2,
+  "DurationMinutes": 5,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

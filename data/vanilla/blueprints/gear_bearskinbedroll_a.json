@@ -1,0 +1,32 @@
+{
+  "Name": "BLUEPRINT_GEAR_BearSkinBedRoll_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_BearHideDried",
+      "Count": 2
+    },
+    {
+      "Item": "GEAR_Cloth",
+      "Count": 5
+    },
+    {
+      "Item": "GEAR_GutDried",
+      "Count": 6
+    }
+  ],
+  "RequiredTool": "GEAR_Knife",
+  "OptionalTools": [
+    "GEAR_Hatchet",
+    "GEAR_KnifeImprovised",
+    "GEAR_HatchetImprovised"
+  ],
+  "RequiredCraftingLocation": "Workbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_BearSkinBedRoll",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 2100,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

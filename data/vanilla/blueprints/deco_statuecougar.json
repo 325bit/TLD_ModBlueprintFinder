@@ -1,0 +1,20 @@
+{
+  "Name": "BLUEPRINT_DECO_StatueCougar",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Softwood",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "Anywhere",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "OBJ_Wood_Statue_Cougar_Prefab",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 240,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

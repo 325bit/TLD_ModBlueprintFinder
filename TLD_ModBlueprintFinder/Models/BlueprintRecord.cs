@@ -126,6 +126,12 @@ public sealed class BlueprintRecord
 
     public BlueprintSourceKind SourceKind { get; init; } = BlueprintSourceKind.Blueprint;
 
+    /// <summary>
+    /// True for the game's own blueprints, exported from its bundles and shipped inside the exe.
+    /// Vanilla rows are read-only: there is no file to write back to, so edit/backup/delete stay disabled.
+    /// </summary>
+    public bool IsVanilla { get; init; }
+
     /// <summary>Blueprint ID (JSON "Name"). The blueprint's unique key in game.</summary>
     public string Name { get; init; } = string.Empty;
 
@@ -234,6 +240,9 @@ public sealed class ScanReport
     public List<ItemDefinition> Definitions { get; } = new();
 
     public List<ContainerSummary> Containers { get; } = new();
+
+    /// <summary>The game's own blueprints loaded from the embedded snapshot; null when disabled.</summary>
+    public Parsing.VanillaExport? Vanilla { get; set; }
     public List<string> Errors { get; } = new();
     public int JsonEntriesSeen { get; set; }
     public int JsonEntriesParsed { get; set; }

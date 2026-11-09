@@ -25,6 +25,9 @@ public interface IDetailRow
 
     /// <summary>Short title for the status bar and dialogs, e.g. "AcornShelled (AHandyToolbox)".</summary>
     string EditTitle { get; }
+
+    /// <summary>True for rows that come from the game itself: nothing to write back, so every edit stays off.</summary>
+    bool IsVanilla => false;
 }
 
 /// <summary>Confidence in "which ID does this definition belong to".</summary>

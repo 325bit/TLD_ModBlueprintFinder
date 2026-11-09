@@ -2,7 +2,7 @@
 
 [English](#english) · [中文](#中文)
 
-![version](https://img.shields.io/badge/version-1.5.1-informational)
+![version](https://img.shields.io/badge/version-1.6.0-informational)
 
 ![game](https://img.shields.io/badge/The%20Long%20Dark-2.55-success)
 
@@ -29,11 +29,13 @@ made, what consumes it, and what its own JSON looks like - without unpacking a s
 - Anything you find can be edited in place and written back, with a backup taken first.
 - A partial ID is enough: typing `Acorn` finds `GEAR_AcornShelled`, and widened matches are marked so you can
   tell them from real ones.
+- **The game's own recipes are included**: mod results come first, vanilla ones underneath and read-only. They
+  ship inside the exe, so "what makes this" answers even for an item no mod touches.
 
 ### Requirements
 
 - Windows 10 or 11
-- The Long Dark **2.55** with at least one `modcomponent` in `Mods` (dll-only mods carry no recipes)
+- The Long Dark **2.55** - the vanilla recipes are built in; mods are optional and read from `Mods`
 - Nothing else: the released exe is self-contained and needs no .NET install
 
 ### Installation
@@ -141,11 +143,12 @@ Released under the [MIT License](LICENSE).
 - 物品定义页直接贴出 `auto-mapped/` 里这个物品自己的 JSON，改自己的 mod 时照抄即可。
 - 查到的东西可以就地改、写回 modcomponent，写之前先备份。
 - 只输一部分就能查：`Acorn` 也能找到 `GEAR_AcornShelled`，凑出来的结果会另外标出来，不会跟精确命中混淆。
+- **游戏原版配方一并列出**：每一页 mod 的行在前、原版的行在后，原版只读；数据内置在 exe 里，`Mods` 空了也查得到。
 
 ### 前置
 
 - Windows 10 / 11
-- 《漫漫长夜》**2.55**，`Mods` 里至少有一个 `modcomponent`（纯 dll 的 mod 不带配方）
+- 《漫漫长夜》**2.55** —— 原版配方已内置；mod 可选，从 `Mods` 里读取
 - 不需要别的：发布版是单文件自包含 exe，不用装 .NET
 
 ### 安装

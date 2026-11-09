@@ -1,0 +1,22 @@
+{
+  "Name": "BLUEPRINT_GEAR_ImprovisedHat_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Cloth",
+      "Count": 2
+    }
+  ],
+  "RequiredTool": "GEAR_SewingKit",
+  "OptionalTools": [
+    "GEAR_HookAndLine"
+  ],
+  "RequiredCraftingLocation": "Anywhere",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_ImprovisedHat",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 60,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

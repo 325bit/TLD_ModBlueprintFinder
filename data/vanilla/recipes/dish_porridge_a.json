@@ -1,0 +1,34 @@
+{
+  "RecipeName": "BLUEPRINT_DISH_Porridge_A",
+  "RecipeDescription": "",
+  "RecipeIcon": "",
+  "RequiredSkillLevel": 0,
+  "AllowedCookingPots": [],
+  "BlueprintData": {
+    "Name": "BLUEPRINT_DISH_Porridge_A",
+    "RequiredGear": [],
+    "RequiredTool": "",
+    "OptionalTools": [],
+    "RequiredCraftingLocation": "Anywhere",
+    "RequiresLitFire": true,
+    "RequiresLight": false,
+    "CraftedResult": "GEAR_UncookedPorridge",
+    "CraftedResultCount": 1,
+    "DurationMinutes": 5,
+    "CraftingAudio": "",
+    "AppliedSkill": "Cooking",
+    "ImprovedSkill": "Cooking",
+    "RequiredPowder": [
+      {
+        "Powder": "POWDER_OatsTin",
+        "QuantityInKilograms": 0.1
+      }
+    ],
+    "RequiredLiquid": [
+      {
+        "Liquid": "LIQUID_WaterPotable",
+        "VolumeInLitres": 0.25
+      }
+    ]
+  }
+}

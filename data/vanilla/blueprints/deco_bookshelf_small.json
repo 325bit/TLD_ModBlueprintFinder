@@ -1,0 +1,20 @@
+{
+  "Name": "BLUEPRINT_DECO_BookShelf_Small",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Softwood",
+      "Count": 8
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "FurnitureWorkbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "OBJ_Rustic_Shelf_A_Prefab",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 360,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

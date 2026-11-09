@@ -1,0 +1,32 @@
+{
+  "Name": "BLUEPRINT_DECO_CozyBed",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Hardwood",
+      "Count": 12
+    },
+    {
+      "Item": "GEAR_Cloth",
+      "Count": 10
+    },
+    {
+      "Item": "GEAR_GutDried",
+      "Count": 6
+    },
+    {
+      "Item": "GEAR_PtarmiganFeathers",
+      "Count": 16
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "FurnitureWorkbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "OBJ_Rustic_Bed_B_Prefab",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 1200,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

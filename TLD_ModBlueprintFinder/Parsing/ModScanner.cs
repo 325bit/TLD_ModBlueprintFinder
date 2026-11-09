@@ -21,6 +21,12 @@ public sealed class ScanOptions
 
     /// <summary>Per-entry size cap, to survive malformed or zip-bomb containers.</summary>
     public long MaxEntryBytes { get; set; } = 16 * 1024 * 1024;
+
+    /// <summary>
+    /// Also load the game's own blueprints that ship inside the exe. On by default: a player asking
+    /// "what makes this" wants the vanilla answer too, and user mods override vanilla rather than replace it.
+    /// </summary>
+    public bool IncludeVanilla { get; set; } = true;
 }
 
 /// <summary>Scan progress report.</summary>
@@ -59,6 +65,10 @@ public sealed class ModScanner
         if (resolved.Containers.Count == 0)
         {
             report.Errors.Add($"在 {resolved.DisplayRoot} 下没有找到任何 .modcomponent 文件或解压形式的 mod 目录。");
+
+            // Vanilla still loads: it is embedded in the exe and has nothing to do with the path, so "wrong
+            // path" must not also mean "no data at all". The UI warns about the empty path separately.
+            LoadVanilla(report, options, progress, 0);
             report.Elapsed = sw.Elapsed;
             return report;
         }
@@ -100,9 +110,29 @@ public sealed class ModScanner
             done++;
         }
 
+        // Vanilla goes last so every mod record keeps its scan order; the UI re-sorts per group anyway.
+        LoadVanilla(report, options, progress, total);
+
         progress?.Report(new ScanProgress("解析完成", total, total));
         report.Elapsed = sw.Elapsed;
         return report;
+    }
+
+    /// <summary>
+    /// Appends the embedded vanilla snapshot to the report. Kept in one place so the "no container" early
+    /// return and the normal path cannot drift apart - a second copy is how one of them ends up not loading.
+    /// </summary>
+    private static void LoadVanilla(
+        ScanReport report, ScanOptions options, IProgress<ScanProgress>? progress, int total)
+    {
+        if (!options.IncludeVanilla) return;
+
+        progress?.Report(new ScanProgress("正在载入游戏原版配方 …", total, total));
+
+        var vanilla = VanillaArchive.Load();
+        report.Vanilla = vanilla;
+        report.Records.AddRange(vanilla.Records);
+        report.Errors.AddRange(vanilla.Errors);
     }
 
     // Path resolution: normalize any reasonable input into a list of containers

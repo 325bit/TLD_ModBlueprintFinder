@@ -1,0 +1,20 @@
+{
+  "Name": "BLUEPRINT_GEAR_ReishiPrepared_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_ReishiMushroom",
+      "Count": 2
+    }
+  ],
+  "RequiredTool": "",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "Anywhere",
+  "RequiresLitFire": false,
+  "RequiresLight": false,
+  "CraftedResult": "GEAR_ReishiPrepared",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 15,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

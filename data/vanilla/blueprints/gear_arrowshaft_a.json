@@ -1,0 +1,24 @@
+{
+  "Name": "BLUEPRINT_GEAR_ArrowShaft_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_BirchSaplingDried",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "GEAR_Knife",
+  "OptionalTools": [
+    "GEAR_Hatchet",
+    "GEAR_KnifeImprovised",
+    "GEAR_HatchetImprovised"
+  ],
+  "RequiredCraftingLocation": "Workbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_ArrowShaft",
+  "CraftedResultCount": 3,
+  "DurationMinutes": 60,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

@@ -1,0 +1,20 @@
+{
+  "Name": "BLUEPRINT_DECO_FramedPhoto",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Hardwood",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "FurnitureWorkbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "DECO_FramedPhoto",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 120,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

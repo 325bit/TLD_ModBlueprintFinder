@@ -1,0 +1,28 @@
+{
+  "Name": "BLUEPRINT_DECO_Wood_WallArt_B",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Hardwood",
+      "Count": 2
+    },
+    {
+      "Item": "GEAR_Softwood",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_ReclaimedWoodB",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "Anywhere",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "OBJ_Wood_Wall_Art_B_Prefab",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 300,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

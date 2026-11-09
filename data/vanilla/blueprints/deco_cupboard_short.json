@@ -1,0 +1,28 @@
+{
+  "Name": "BLUEPRINT_DECO_Cupboard_Short",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Hardwood",
+      "Count": 18
+    },
+    {
+      "Item": "GEAR_ReclaimedWoodB",
+      "Count": 3
+    },
+    {
+      "Item": "GEAR_ScrapMetal",
+      "Count": 2
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "FurnitureWorkbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "CONTAINER_Rustic_Closet_B",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 540,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

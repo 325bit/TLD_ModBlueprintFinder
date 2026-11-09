@@ -1,0 +1,40 @@
+{
+  "RecipeName": "BLUEPRINT_DISH_Broth_A",
+  "RecipeDescription": "",
+  "RecipeIcon": "",
+  "RequiredSkillLevel": 0,
+  "AllowedCookingPots": [],
+  "BlueprintData": {
+    "Name": "BLUEPRINT_DISH_Broth_A",
+    "RequiredGear": [
+      {
+        "Item": "GEAR_RawMeatPtarmigan",
+        "Quantity": 1.0,
+        "Units": "Kilograms"
+      }
+    ],
+    "RequiredTool": "",
+    "OptionalTools": [],
+    "RequiredCraftingLocation": "Anywhere",
+    "RequiresLitFire": true,
+    "RequiresLight": false,
+    "CraftedResult": "GEAR_UncookedBroth",
+    "CraftedResultCount": 1,
+    "DurationMinutes": 10,
+    "CraftingAudio": "",
+    "AppliedSkill": "Cooking",
+    "ImprovedSkill": "Cooking",
+    "RequiredPowder": [
+      {
+        "Powder": "POWDER_Salt",
+        "QuantityInKilograms": 0.01
+      }
+    ],
+    "RequiredLiquid": [
+      {
+        "Liquid": "LIQUID_WaterPotable",
+        "VolumeInLitres": 1.5
+      }
+    ]
+  }
+}

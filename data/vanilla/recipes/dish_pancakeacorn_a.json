@@ -1,0 +1,42 @@
+{
+  "RecipeName": "BLUEPRINT_DISH_PancakeAcorn_A",
+  "RecipeDescription": "",
+  "RecipeIcon": "",
+  "RequiredSkillLevel": 0,
+  "AllowedCookingPots": [],
+  "BlueprintData": {
+    "Name": "BLUEPRINT_DISH_PancakeAcorn_A",
+    "RequiredGear": [
+      {
+        "Item": "GEAR_AcornGrounds",
+        "Count": 1
+      },
+      {
+        "Item": "GEAR_MapleSyrup",
+        "Quantity": 0.05,
+        "Units": "Kilograms"
+      }
+    ],
+    "RequiredTool": "",
+    "OptionalTools": [],
+    "RequiredCraftingLocation": "Anywhere",
+    "RequiresLitFire": true,
+    "RequiresLight": false,
+    "CraftedResult": "GEAR_UncookedPancakeAcorn",
+    "CraftedResultCount": 1,
+    "DurationMinutes": 5,
+    "CraftingAudio": "",
+    "AppliedSkill": "Cooking",
+    "ImprovedSkill": "Cooking",
+    "RequiredLiquid": [
+      {
+        "Liquid": "LIQUID_WaterPotable",
+        "VolumeInLitres": 0.1
+      },
+      {
+        "Liquid": "LIQUID_CookingOil",
+        "VolumeInLitres": 0.05
+      }
+    ]
+  }
+}

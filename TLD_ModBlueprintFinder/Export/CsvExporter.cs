@@ -10,7 +10,7 @@ public static class CsvExporter
     {
         "类别", "蓝图名", "食谱键", "产物", "产出数量", "匹配说明",
         "制作地点", "耗时", "原料", "工具", "额外条件", "来源Mod", "来源类型", "副本数", "容器", "条目路径",
-        "物品定义JSON"
+        "物品定义JSON", "来源"
     };
 
     /// <summary>Flattens the five result groups of one query into CSV text.</summary>
@@ -60,7 +60,8 @@ public static class CsvExporter
                 row.DuplicateText,
                 p.ContainerPath,
                 p.EntryPath,
-                string.Empty        // item definition JSON: recipe rows leave it empty
+                string.Empty,        // item definition JSON: recipe rows leave it empty
+                Origin(row)
             };
 
             sb.AppendLine(string.Join(",", values.Select(Escape)));
@@ -94,12 +95,19 @@ public static class CsvExporter
                 string.Empty,          // duplicate count
                 d.ContainerPath,
                 d.EntryPath,
-                d.JsonText
+                d.JsonText,
+                Origin(row)
             };
 
             sb.AppendLine(string.Join(",", values.Select(Escape)));
         }
     }
+
+    /// <summary>
+    /// Last column: "MOD" or "原版". Appended at the end so an existing consumer that reads columns by
+    /// index keeps working; the sort already puts mod rows above vanilla ones, this makes it filterable.
+    /// </summary>
+    private static string Origin(IDetailRow row) => row.IsVanilla ? "原版" : "MOD";
 
     /// <summary>Writes the file (UTF-8 with BOM so Excel opens it without mojibake).</summary>
     public static void Save(string path, string csv)

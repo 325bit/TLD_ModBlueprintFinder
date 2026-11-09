@@ -1,0 +1,20 @@
+{
+  "Name": "BLUEPRINT_GEAR_OldMansBeardDressing_B",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_OldMansBeardHarvested",
+      "Count": 3
+    }
+  ],
+  "RequiredTool": "",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "Anywhere",
+  "RequiresLitFire": false,
+  "RequiresLight": false,
+  "CraftedResult": "GEAR_OldMansBeardDressing",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 15,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

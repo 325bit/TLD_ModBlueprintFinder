@@ -50,7 +50,8 @@ internal static class Cli
         {
             IncludeSubFolders = !options.ContainsKey("no-subfolders"),
             IncludeExtractedFolders = !options.ContainsKey("no-folders"),
-            IncludeModComponentTemp = options.ContainsKey("temp")
+            IncludeModComponentTemp = options.ContainsKey("temp"),
+            IncludeVanilla = !options.ContainsKey("no-vanilla")
         };
 
         ScanReport report;
@@ -149,19 +150,23 @@ internal static class Cli
         Console.WriteLine("  --no-subfolders  不递归子目录");
         Console.WriteLine("  --no-folders     跳过解压目录形式");
         Console.WriteLine("  --temp           扫描 _ModComponentTemp");
+        Console.WriteLine("  --no-vanilla     不加载内置的游戏原版配方");
         Console.WriteLine("  --scan-only      只扫描并打印统计");
         Console.WriteLine("  --csv <路径>     导出结果 CSV");
     }
 
     private static void PrintScanSummary(ScanReport report)
     {
+        var modRecords = report.Records.Where(r => !r.IsVanilla).ToList();
+
         Console.WriteLine("══════════ 扫描结果 ══════════");
         Console.WriteLine($"Mods 根目录 : {report.ResolvedModRoot}");
         Console.WriteLine($"容器数量    : {report.Containers.Count}（成功 {report.Containers.Count(c => !c.LoadFailed)}，失败 {report.Containers.Count(c => c.LoadFailed)}）");
         Console.WriteLine($"JSON 条目   : 共 {report.JsonEntriesSeen}，解析 {report.JsonEntriesParsed}，跳过 {report.JsonEntriesSkipped}");
-        Console.WriteLine($"蓝图记录    : {report.Records.Count}（其中食谱 {report.Records.Count(r => r.SourceKind == BlueprintSourceKind.Recipe)}）");
+        Console.WriteLine($"mod 蓝图    : {modRecords.Count}（其中食谱 {modRecords.Count(r => r.SourceKind == BlueprintSourceKind.Recipe)}）");
+        Console.WriteLine($"游戏原版    : {DescribeVanilla(report)}");
         Console.WriteLine($"物品定义    : {report.Definitions.Count} 份（auto-mapped）");
-        Console.WriteLine($"涉及物品 ID : {report.Records.SelectMany(r => r.Ingredients.Select(i => i.ItemId)).Concat(report.Records.Select(r => r.CraftedResult)).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.OrdinalIgnoreCase).Count()}");
+        Console.WriteLine($"涉及物品 ID : {modRecords.SelectMany(r => r.Ingredients.Select(i => i.ItemId)).Concat(modRecords.Select(r => r.CraftedResult)).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.OrdinalIgnoreCase).Count()}");
         Console.WriteLine($"解析警告    : {report.WarningCount}");
         Console.WriteLine($"耗时        : {report.Elapsed.TotalMilliseconds:0} ms");
 
@@ -181,6 +186,17 @@ internal static class Cli
         }
 
         Console.WriteLine();
+    }
+
+    /// <summary>One line for the embedded vanilla snapshot: what it holds and which build it came from.</summary>
+    private static string DescribeVanilla(ScanReport report)
+    {
+        var vanilla = report.Vanilla;
+        if (vanilla is null) return "未载入";
+        if (!vanilla.IsAvailable) return "不可用（内置数据缺失或损坏）";
+
+        var version = string.IsNullOrWhiteSpace(vanilla.GameVersion) ? "版本未知" : $"游戏 {vanilla.GameVersion}";
+        return $"{vanilla.BlueprintCount} 蓝图 / {vanilla.RecipeCount} 食谱（{version}，只读）";
     }
 
     private static void PrintOutcome(SearchOutcome outcome)
@@ -248,7 +264,10 @@ internal static class Cli
             Console.WriteLine($"     原料: {row.IngredientsText}");
             if (!string.IsNullOrEmpty(row.ToolsText)) Console.WriteLine($"     工具: {row.ToolsText}");
             if (!string.IsNullOrEmpty(row.ExtraText)) Console.WriteLine($"     附加: {row.ExtraText}");
-            Console.WriteLine($"     来源: {row.ModSources} ({row.SourceKindText})  {p.EntryPath}");
+
+            // Vanilla rows are the tail of every group; the tag keeps them from reading as a mod row.
+            var origin = row.IsVanilla ? "  〔原版·只读〕" : "";
+            Console.WriteLine($"     来源: {row.ModSources} ({row.SourceKindText})  {p.EntryPath}{origin}");
         }
     }
 }

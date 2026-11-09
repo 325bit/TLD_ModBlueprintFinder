@@ -1,0 +1,26 @@
+{
+  "Name": "BLUEPRINT_GEAR_ImprovisedDownInsulation",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Cloth",
+      "Count": 4
+    },
+    {
+      "Item": "GEAR_PtarmiganFeathers",
+      "Count": 5
+    }
+  ],
+  "RequiredTool": "GEAR_SewingKit",
+  "OptionalTools": [
+    "GEAR_HookAndLine"
+  ],
+  "RequiredCraftingLocation": "Anywhere",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_ImprovisedDownInsulation",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 120,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

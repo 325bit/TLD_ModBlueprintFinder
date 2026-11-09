@@ -1,0 +1,28 @@
+{
+  "RecipeName": "BLUEPRINT_DISH_CookingOil_A",
+  "RecipeDescription": "",
+  "RecipeIcon": "",
+  "RequiredSkillLevel": 0,
+  "AllowedCookingPots": [],
+  "BlueprintData": {
+    "Name": "BLUEPRINT_DISH_CookingOil_A",
+    "RequiredGear": [
+      {
+        "Item": "GEAR_AnimalFat",
+        "Quantity": 1.0,
+        "Units": "Kilograms"
+      }
+    ],
+    "RequiredTool": "",
+    "OptionalTools": [],
+    "RequiredCraftingLocation": "Anywhere",
+    "RequiresLitFire": true,
+    "RequiresLight": false,
+    "CraftedResult": "GEAR_UncookedOil",
+    "CraftedResultCount": 1,
+    "DurationMinutes": 10,
+    "CraftingAudio": "",
+    "AppliedSkill": "Cooking",
+    "ImprovedSkill": "Cooking"
+  }
+}

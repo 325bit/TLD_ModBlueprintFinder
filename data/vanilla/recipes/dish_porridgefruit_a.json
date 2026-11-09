@@ -1,0 +1,49 @@
+{
+  "RecipeName": "BLUEPRINT_DISH_PorridgeFruit_A",
+  "RecipeDescription": "",
+  "RecipeIcon": "",
+  "RequiredSkillLevel": 0,
+  "AllowedCookingPots": [],
+  "BlueprintData": {
+    "Name": "BLUEPRINT_DISH_PorridgeFruit_A",
+    "RequiredGear": [
+      {
+        "Item": "GEAR_MapleSyrup",
+        "Quantity": 0.05,
+        "Units": "Kilograms"
+      },
+      {
+        "Item": "GEAR_RoseHip",
+        "Count": 4
+      },
+      {
+        "Item": "GEAR_PinnacleCanPeaches",
+        "Quantity": 0.5,
+        "Units": "Kilograms"
+      }
+    ],
+    "RequiredTool": "",
+    "OptionalTools": [],
+    "RequiredCraftingLocation": "Anywhere",
+    "RequiresLitFire": true,
+    "RequiresLight": false,
+    "CraftedResult": "GEAR_UncookedPorridgeFruit",
+    "CraftedResultCount": 1,
+    "DurationMinutes": 8,
+    "CraftingAudio": "",
+    "AppliedSkill": "Cooking",
+    "ImprovedSkill": "Cooking",
+    "RequiredPowder": [
+      {
+        "Powder": "POWDER_OatsTin",
+        "QuantityInKilograms": 0.1
+      }
+    ],
+    "RequiredLiquid": [
+      {
+        "Liquid": "LIQUID_WaterPotable",
+        "VolumeInLitres": 0.2
+      }
+    ]
+  }
+}

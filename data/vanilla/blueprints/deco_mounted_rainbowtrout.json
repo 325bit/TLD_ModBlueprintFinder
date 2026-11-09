@@ -1,0 +1,24 @@
+{
+  "Name": "BLUEPRINT_DECO_Mounted_RainbowTrout",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Hardwood",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_RawRainbowTrout",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "FurnitureWorkbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "OBJ_Mounted_Rainbow_Trout_Prefab",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 240,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

@@ -406,11 +406,30 @@ public sealed partial class MainForm : Form
         }
 
         var failed = report.Containers.Count(c => c.LoadFailed);
+        var modRecords = report.Records.Count(r => !r.IsVanilla);
+        var vanillaRecords = report.Records.Count - modRecords;
+
         _txtDetail.Text = BuildScanSummary(report);
 
+        var vanillaNote = vanillaRecords > 0 ? $" + 原版 {vanillaRecords} 条" : "";
+
         SetStatus(
-            $"扫描完成：{report.Containers.Count} 个容器（失败 {failed}），{report.Records.Count} 条蓝图 + {report.Definitions.Count} 份物品定义，耗时 {report.Elapsed.TotalMilliseconds:0} ms。",
+            $"扫描完成：{report.Containers.Count} 个容器（失败 {failed}），mod 蓝图 {modRecords} 条{vanillaNote} + " +
+            $"{report.Definitions.Count} 份物品定义，耗时 {report.Elapsed.TotalMilliseconds:0} ms。",
             failed > 0 || report.Errors.Count > 0 ? Color.DarkOrange : Color.ForestGreen);
+
+        // No container but data exists: the path is probably wrong, which must be said out loud - the results
+        // that appear are the embedded vanilla snapshot and would otherwise look like a successful scan.
+        if (report.Containers.Count == 0 && !silent)
+        {
+            MessageBox.Show(this,
+                "这个路径下没有找到任何 modcomponent。\n\n" +
+                "下面列出的只是内置的游戏原版配方（与路径无关）。请确认路径指向：\n" +
+                "  · 《漫漫长夜》游戏根目录（含 Mods 文件夹），或\n" +
+                "  · Mods 目录本身\n\n" +
+                $"当前解析到的根目录：{report.ResolvedModRoot}",
+                "没有找到 modcomponent", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
 
         // Run a search right away when an item ID is already filled in
         if (!string.IsNullOrWhiteSpace(_txtItem.Text))
@@ -483,7 +502,8 @@ public sealed partial class MainForm : Form
         _lblCounts.Text =
             $"蓝图产物 {_outcome.AsProduct.Count} ｜ 蓝图原料 {_outcome.AsIngredient.Count} ｜ 工具 {_outcome.AsTool.Count}" +
             $" ｜ 食谱产物 {_outcome.AsRecipeProduct.Count} ｜ 食谱原料 {_outcome.AsRecipeIngredient.Count}" +
-            $" ｜ 定义 {_outcome.Definitions.Count}";
+            $" ｜ 定义 {_outcome.Definitions.Count}" +
+            (_outcome.VanillaHits > 0 ? $"（其中原版 {_outcome.VanillaHits}）" : "");
 
         if (_outcome.IsEmpty)
         {
@@ -501,9 +521,9 @@ public sealed partial class MainForm : Form
             else
             {
                 sb.AppendLine("当前索引里没有任何相近的物品 ID。可能原因：");
-                sb.AppendLine("  · 这个物品来自原版游戏，而本工具只索引 Mod 的 modcomponent（蓝图 + auto-mapped 定义）");
-                sb.AppendLine("  · 该 mod 没有提供蓝图（只是添加了物品）");
+                sb.AppendLine("  · 该 mod 只添加了物品、没有写配方（本工具只能列出配方与 auto-mapped 定义）");
                 sb.AppendLine("  · modcomponent 未被扫描到（检查路径与「含子目录」选项）");
+                sb.AppendLine("  · 原版快照只含游戏本体的蓝图与食谱，不含物品定义；纯原版物品不会有第⑥页");
             }
 
             _txtDetail.Text = sb.ToString();
@@ -523,7 +543,11 @@ public sealed partial class MainForm : Form
                 ? $"，物品定义 {_outcome.Definitions.Count} 份"
                 : "";
 
-            SetStatus($"「{query}」共命中配方 {_outcome.TotalHits} 条{defNote}。{note}",
+            var splitNote = _outcome.VanillaHits > 0
+                ? $"（mod {_outcome.ModHits} 条 / 游戏原版 {_outcome.VanillaHits} 条，原版排在后面）"
+                : "";
+
+            SetStatus($"「{query}」共命中配方 {_outcome.TotalHits} 条{defNote}。{splitNote}{note}",
                 inexact > 0 ? Color.DarkOrange : Color.ForestGreen);
 
             // Auto-select the detail of the first non-empty group
@@ -563,6 +587,15 @@ public sealed partial class MainForm : Form
     {
         if (sender is not DataGridView grid || e.RowIndex < 0 || e.CellStyle is null) return;
         if (grid.Rows[e.RowIndex].DataBoundItem is not IDetailRow row) return;
+
+        // Vanilla rows always sit at the bottom of their group. Tinting the source cell (not the whole row)
+        // keeps that readable without fighting the selection colours or the italic used for widened matches.
+        if (row.IsVanilla &&
+            grid.Columns[e.ColumnIndex].Name is nameof(SearchRow.ModSources) or nameof(DefinitionRow.ModName))
+        {
+            e.CellStyle.ForeColor = Color.FromArgb(0, 108, 122);
+        }
+
         if (row.Quality == MatchQuality.Exact) return;
 
         e.CellStyle.ForeColor = row.Quality == MatchQuality.Prefix
@@ -578,6 +611,15 @@ public sealed partial class MainForm : Form
     {
         if (sender is not DataGridView grid || e.RowIndex < 0) return;
         if (grid.Rows[e.RowIndex].DataBoundItem is not IDetailRow row) return;
+
+        // Read-only is stated on hover too: the edit buttons simply being greyed out leaves the reason open.
+        if (row.IsVanilla && e.ColumnIndex == 0)
+        {
+            e.ToolTipText = "来自游戏原版：内置快照，只读。\n" +
+                            "没有 modcomponent 可以写回，编辑 / 备份 / 容器编辑器都不会作用在这一行。\n" +
+                            "想改原版配方只能用 mod 覆盖。";
+            return;
+        }
 
         if (row.Quality != MatchQuality.Exact)
         {
@@ -617,6 +659,11 @@ public sealed partial class MainForm : Form
         }
 
         var text = row.BuildDetailText();
+        if (row.IsVanilla)
+        {
+            text = "【游戏原版】这一条来自游戏本体，只读：没有可以写回的 modcomponent。\n" +
+                   "要改它只能靠 mod 覆盖，本工具不参与。\n\n" + text;
+        }
 
         // Do not re-render identical text: selection change and mouse click both reach this method, and
         // rendering twice resets the scroll position, which makes reading long JSON painful.
@@ -635,17 +682,28 @@ public sealed partial class MainForm : Form
         return row;
     }
 
-    /// <summary>Enables or disables the three buttons from "is a row selected" and "is an edit open".</summary>
+    /// <summary>Enables or disables the edit buttons from "is a row selected" and "is an edit open".</summary>
     private void UpdateEditButtons()
     {
         var row = CurrentRow(ActiveGrid());
+
+        // Two conditions, not one. An empty container already excludes vanilla rows, but that is a side
+        // effect of how the snapshot is loaded; IsVanilla states the rule, so a future change to the
+        // container path cannot quietly make the game's own recipes editable.
         var locatable = row is not null &&
+                        !row.IsVanilla &&
                         !string.IsNullOrEmpty(row.ContainerPath) &&
                         !string.IsNullOrEmpty(row.EntryPath);
 
         _btnEdit.Enabled = _edit is not null || (locatable && row!.EditableJson.Length > 0);
         _btnSaveEdit.Enabled = _edit is not null;
-        _btnBackup.Enabled = _edit is not null ? true : row is not null && !string.IsNullOrEmpty(row.ContainerPath);
+        _btnBackup.Enabled = _edit is not null || locatable;
+
+        // The container editor is not row-scoped, so it stays available; the tooltip explains why it opens on
+        // the first container instead of the selected row.
+        _tips.SetToolTip(_btnOpenEditor, row is { IsVanilla: true }
+            ? "当前行来自游戏原版，没有对应的 modcomponent。编辑器会打开，但不会定位到某个文件。"
+            : "打开完整的 modcomponent JSON 编辑器，可以对容器里的文件增删改查。");
     }
 
     private void SetDetailText(string text)
@@ -776,12 +834,16 @@ public sealed partial class MainForm : Form
 
         var row = CurrentRow(ActiveGrid());
 
+        // A vanilla row has no container: open the editor on the first container instead of handing it an
+        // empty path, which would show "no container selected" next to a row that visibly has a source.
+        var containerPath = row is not null && !row.IsVanilla ? row.ContainerPath : null;
+
         try
         {
             using var editor = new ContainerEditorForm(
                 _report.Containers,
-                row?.ContainerPath,
-                row?.EntryPath,
+                containerPath,
+                containerPath is null ? null : row?.EntryPath,
                 _chkAutoBackup.Checked);
 
             editor.ShowDialog(this);
@@ -805,6 +867,12 @@ public sealed partial class MainForm : Form
         if (row is null || string.IsNullOrEmpty(row.ContainerPath))
         {
             SetStatus("请先在左侧选中一行，再备份它所属的 modcomponent。", Color.Firebrick);
+            return;
+        }
+
+        if (row.IsVanilla)
+        {
+            SetStatus("这一行来自游戏原版，没有可以备份的 modcomponent。", Color.Firebrick);
             return;
         }
 
@@ -836,6 +904,12 @@ public sealed partial class MainForm : Form
         if (row is null || string.IsNullOrEmpty(row.ContainerPath) || string.IsNullOrEmpty(row.EntryPath))
         {
             SetStatus("请先在左侧选中一行，再编辑它对应的 JSON。", Color.Firebrick);
+            return;
+        }
+
+        if (row.IsVanilla)
+        {
+            SetStatus("这一行来自游戏原版，只读：要改它只能写一个 mod 覆盖。", Color.Firebrick);
             return;
         }
 
@@ -1043,23 +1117,37 @@ public sealed partial class MainForm : Form
 
     private static string BuildScanSummary(ScanReport report)
     {
+        var modRecords = report.Records.Where(r => !r.IsVanilla).ToList();
+        var vanillaRecords = report.Records.Count - modRecords.Count;
+
         var sb = new StringBuilder();
         sb.AppendLine("═══ 扫描摘要 ═══");
         sb.AppendLine($"根目录        : {report.ResolvedModRoot}");
         sb.AppendLine($"容器          : {report.Containers.Count} 个（失败 {report.Containers.Count(c => c.LoadFailed)}）");
         sb.AppendLine($"JSON 条目     : 见 {report.JsonEntriesSeen}，解析成功 {report.JsonEntriesParsed}，跳过 {report.JsonEntriesSkipped}");
-        sb.AppendLine($"蓝图记录      : {report.Records.Count}（食谱 {report.Records.Count(r => r.SourceKind == BlueprintSourceKind.Recipe)}）");
+        sb.AppendLine($"mod 蓝图记录  : {modRecords.Count}（食谱 {modRecords.Count(r => r.SourceKind == BlueprintSourceKind.Recipe)}）");
+        sb.AppendLine($"游戏原版      : {VanillaLine(report, vanillaRecords)}");
         sb.AppendLine($"物品定义      : {report.Definitions.Count} 份（auto-mapped，含未参与配方的物品）");
         sb.AppendLine($"解析警告      : {report.WarningCount}");
         sb.AppendLine($"耗时          : {report.Elapsed.TotalMilliseconds:0} ms");
         sb.AppendLine();
 
-        sb.AppendLine("── 按 mod 统计 ──");
-        foreach (var group in report.Records
-                     .GroupBy(r => r.ModName, StringComparer.OrdinalIgnoreCase)
-                     .OrderByDescending(g => g.Count()))
+        if (report.Containers.Count == 0)
         {
-            sb.AppendLine($"  {group.Key,-34} {group.Count(),4} 条");
+            sb.AppendLine("⚠ 这个路径下没有找到任何 modcomponent，因此只有内置的游戏原版配方可用。");
+            sb.AppendLine("  路径应指向《漫漫长夜》游戏根目录（含 Mods），或直接指向 Mods 目录。");
+            sb.AppendLine();
+        }
+
+        if (modRecords.Count > 0)
+        {
+            sb.AppendLine("── 按 mod 统计（不含游戏原版）──");
+            foreach (var group in modRecords
+                         .GroupBy(r => r.ModName, StringComparer.OrdinalIgnoreCase)
+                         .OrderByDescending(g => g.Count()))
+            {
+                sb.AppendLine($"  {group.Key,-34} {group.Count(),4} 条");
+            }
         }
 
         var loadFailed = report.Containers.Where(c => c.LoadFailed).ToList();
@@ -1082,7 +1170,19 @@ public sealed partial class MainForm : Form
 
         sb.AppendLine();
         sb.AppendLine("在上方输入物品 ID 后回车即可检索。");
+        sb.AppendLine("结果里 mod 的行在前、游戏原版的行在后；原版行只读。");
         return sb.ToString();
+    }
+
+    /// <summary>One line describing the embedded vanilla snapshot, including the build it was taken from.</summary>
+    private static string VanillaLine(ScanReport report, int recordCount)
+    {
+        var vanilla = report.Vanilla;
+        if (vanilla is null) return "未载入（扫描时关闭了原版数据）";
+        if (!vanilla.IsAvailable) return "不可用（内置数据缺失或损坏）";
+
+        var version = string.IsNullOrWhiteSpace(vanilla.GameVersion) ? "版本未知" : $"游戏 {vanilla.GameVersion}";
+        return $"{vanilla.BlueprintCount} 蓝图 / {vanilla.RecipeCount} 食谱（{version}，共 {recordCount} 条记录）";
     }
 
     // Settings (next to the exe, portable, never inside the game folder)

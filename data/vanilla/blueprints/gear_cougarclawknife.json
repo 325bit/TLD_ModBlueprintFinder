@@ -1,0 +1,28 @@
+{
+  "Name": "BLUEPRINT_GEAR_CougarClawKnife",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_CougarClaw",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_ScrapMetal",
+      "Count": 3
+    },
+    {
+      "Item": "GEAR_LeatherDried",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "GEAR_Hammer",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "Forge",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_CougarClawKnife",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 220,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

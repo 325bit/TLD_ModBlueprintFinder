@@ -1,0 +1,20 @@
+{
+  "Name": "BLUEPRINT_DECO_StorageBox",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Softwood",
+      "Count": 8
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "FurnitureWorkbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "CONTAINER_Rustic_Storage_Box",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 360,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

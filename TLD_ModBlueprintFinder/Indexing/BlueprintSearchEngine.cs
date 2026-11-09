@@ -66,6 +66,9 @@ public sealed class SearchRow : IDetailRow
         .Select(r => r.ModName)
         .Distinct(StringComparer.OrdinalIgnoreCase));
 
+    /// <summary>Every record behind this row is the game's own; mixed rows cannot happen (GroupKey keeps them apart).</summary>
+    public bool IsVanilla => Primary.IsVanilla;
+
     public string SourceKindText => Primary.SourceKind == BlueprintSourceKind.Recipe ? "食谱" : "蓝图";
 
     // Locating info for in-place editing (only the representative copy when records were merged).
@@ -98,7 +101,13 @@ public sealed class SearchRow : IDetailRow
         {
             sb.AppendLine($"■ {bp.Name}" + (Records.Count > 1 ? $"   （来源副本：{bp.ModName}）" : ""));
             sb.AppendLine($"  来源      : {bp.ModName}  [{(bp.SourceKind == BlueprintSourceKind.Recipe ? "食谱 recipes/" : "蓝图 blueprints/")}]");
-            sb.AppendLine($"  容器      : {bp.ContainerPath}");
+
+            // Vanilla records are unpacked from the game's own bundles and shipped inside the exe: there is
+            // no container path to show, and printing an empty one reads like a parsing failure.
+            sb.AppendLine(bp.IsVanilla
+                ? "  容器      : （内置快照，无 modcomponent 文件）"
+                : $"  容器      : {bp.ContainerPath}");
+
             sb.AppendLine($"  条目      : {bp.EntryPath}");
 
             if (!string.IsNullOrWhiteSpace(bp.RecipeName))
@@ -206,6 +215,16 @@ public sealed class SearchOutcome
         AsProduct.Count + AsIngredient.Count + AsTool.Count +
         AsRecipeProduct.Count + AsRecipeIngredient.Count;
 
+    /// <summary>Every recipe row of every group, in display order.</summary>
+    public IEnumerable<SearchRow> AllRows =>
+        AsProduct.Concat(AsIngredient).Concat(AsTool).Concat(AsRecipeProduct).Concat(AsRecipeIngredient);
+
+    /// <summary>Hits that come from the game itself. Always the last rows of their group.</summary>
+    public int VanillaHits => AllRows.Count(r => r.IsVanilla);
+
+    /// <summary>Hits that come from a mod.</summary>
+    public int ModHits => TotalHits - VanillaHits;
+
     /// <summary>No recipe matched and no item definition was found.</summary>
     public bool IsEmpty => TotalHits == 0 && Definitions.Count == 0;
 }
@@ -264,7 +283,7 @@ public sealed class BlueprintSearchEngine
 
         foreach (var (bp, quality, tool) in Index.SearchAsTool(query, mode))
         {
-            var key = mergeDuplicates ? bp.Name : $"{bp.ModName}::{bp.EntryPath}";
+            var key = GroupKey(bp, mergeDuplicates);
             KeepBest(toolGroups, toolQuality, key, bp, quality);
 
             var note = tool.Role switch
@@ -314,7 +333,7 @@ public sealed class BlueprintSearchEngine
 
         foreach (var (bp, matchQuality, _) in Index.SearchAsProduct(query, mode, kind))
         {
-            var key = mergeDuplicates ? bp.Name : $"{bp.ModName}::{bp.EntryPath}";
+            var key = GroupKey(bp, mergeDuplicates);
             KeepBest(groups, quality, key, bp, matchQuality);
         }
 
@@ -335,7 +354,7 @@ public sealed class BlueprintSearchEngine
 
         foreach (var (bp, matchQuality, ing) in Index.SearchAsIngredient(query, mode, kind))
         {
-            var key = mergeDuplicates ? bp.Name : $"{bp.ModName}::{bp.EntryPath}";
+            var key = GroupKey(bp, mergeDuplicates);
             KeepBest(groups, quality, key, bp, matchQuality);
 
             // When one recipe matches at several ingredient positions, keep the note with the most information.
@@ -354,6 +373,19 @@ public sealed class BlueprintSearchEngine
     /// "Best" rather than "first" because the inverted tables enumerate in dictionary order, so the first
     /// hit may well be a Contains match.
     /// </summary>
+
+    /// <summary>
+    /// Dedup key for one result group. Vanilla is always its own row: merging it into a same-named mod
+    /// blueprint would hide the very distinction the vanilla feature exists to show, and the "source"
+    /// column would read "SomeMod | 游戏原版" instead of two rows.
+    /// </summary>
+    private static string GroupKey(BlueprintRecord bp, bool mergeDuplicates)
+    {
+        if (!mergeDuplicates || bp.IsVanilla)
+            return (bp.IsVanilla ? "vanilla::" : "") + bp.ModName + "::" + bp.EntryPath;
+        return bp.Name;
+    }
+
     private static void KeepBest(
         Dictionary<string, List<BlueprintRecord>> groups,
         Dictionary<string, MatchQuality> qualities,
@@ -387,7 +419,10 @@ public sealed class BlueprintSearchEngine
                     .ToList(),
                 qualities.TryGetValue(key, out var q) ? q : MatchQuality.Contains,
                 noteFactory(key)))
-            .OrderBy(row => row.Quality)
+            // Mod rows first, vanilla after - regardless of match quality. A vanilla placeholder that matched
+            // exactly must not jump above the mod recipe that actually added the item.
+            .OrderBy(row => row.Primary.IsVanilla)
+            .ThenBy(row => row.Quality)
             .ThenBy(row => row.BlueprintName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(row => row.ModSources, StringComparer.OrdinalIgnoreCase);
     }

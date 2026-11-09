@@ -1,0 +1,28 @@
+{
+  "Name": "BLUEPRINT_GEAR_ArrowHardened_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Stick",
+      "Count": 5
+    },
+    {
+      "Item": "GEAR_CrowFeather",
+      "Count": 5
+    }
+  ],
+  "RequiredTool": "GEAR_Knife",
+  "OptionalTools": [
+    "GEAR_Hatchet",
+    "GEAR_KnifeImprovised",
+    "GEAR_HatchetImprovised"
+  ],
+  "RequiredCraftingLocation": "Fire",
+  "RequiresLitFire": true,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_ArrowHardened",
+  "CraftedResultCount": 3,
+  "DurationMinutes": 45,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

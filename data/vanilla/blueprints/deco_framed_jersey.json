@@ -1,0 +1,28 @@
+{
+  "Name": "BLUEPRINT_DECO_Framed_Jersey",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Hardwood",
+      "Count": 2
+    },
+    {
+      "Item": "GEAR_ScrapMetal",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_JerseyHockeyA",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "FurnitureWorkbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "OBJ_FramedJersey_A_Prefab",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 240,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

@@ -1,0 +1,20 @@
+{
+  "Name": "BLUEPRINT_GEAR_Bullet_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_ScrapLead",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "AmmoWorkbench",
+  "RequiresLitFire": true,
+  "RequiresLight": false,
+  "CraftedResult": "GEAR_Bullet",
+  "CraftedResultCount": 6,
+  "DurationMinutes": 60,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "Gunsmithing"
+}

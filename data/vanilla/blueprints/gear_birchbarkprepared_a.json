@@ -1,0 +1,20 @@
+{
+  "Name": "BLUEPRINT_GEAR_BirchbarkPrepared_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_BarkTinder",
+      "Count": 2
+    }
+  ],
+  "RequiredTool": "",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "Anywhere",
+  "RequiresLitFire": false,
+  "RequiresLight": false,
+  "CraftedResult": "GEAR_BirchbarkPrepared",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 5,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

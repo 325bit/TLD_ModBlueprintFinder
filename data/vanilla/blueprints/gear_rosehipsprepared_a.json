@@ -1,0 +1,20 @@
+{
+  "Name": "BLUEPRINT_GEAR_RosehipsPrepared_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_RoseHip",
+      "Count": 24
+    }
+  ],
+  "RequiredTool": "",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "Anywhere",
+  "RequiresLitFire": false,
+  "RequiresLight": false,
+  "CraftedResult": "GEAR_RosehipsPrepared",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 15,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

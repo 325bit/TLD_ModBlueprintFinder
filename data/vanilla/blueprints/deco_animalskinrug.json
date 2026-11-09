@@ -1,0 +1,28 @@
+{
+  "Name": "BLUEPRINT_DECO_AnimalSkinRug",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_LeatherHideDried",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_BearHideDried",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_GutDried",
+      "Count": 2
+    }
+  ],
+  "RequiredTool": "GEAR_HighQualityTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "Workbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "OBJ_RugBear_A_Prefab",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 480,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

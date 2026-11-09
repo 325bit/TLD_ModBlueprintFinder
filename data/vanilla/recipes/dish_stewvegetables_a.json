@@ -1,0 +1,53 @@
+{
+  "RecipeName": "BLUEPRINT_DISH_StewVegetables_A",
+  "RecipeDescription": "",
+  "RecipeIcon": "",
+  "RequiredSkillLevel": 0,
+  "AllowedCookingPots": [],
+  "BlueprintData": {
+    "Name": "BLUEPRINT_DISH_StewVegetables_A",
+    "RequiredGear": [
+      {
+        "Item": "GEAR_CannedCorn",
+        "Quantity": 0.3,
+        "Units": "Kilograms"
+      },
+      {
+        "Item": "GEAR_Carrot",
+        "Quantity": 0.4,
+        "Units": "Kilograms"
+      },
+      {
+        "Item": "GEAR_Potato",
+        "Count": 2
+      },
+      {
+        "Item": "GEAR_ReishiMushroom",
+        "Count": 2
+      }
+    ],
+    "RequiredTool": "",
+    "OptionalTools": [],
+    "RequiredCraftingLocation": "Anywhere",
+    "RequiresLitFire": true,
+    "RequiresLight": false,
+    "CraftedResult": "GEAR_UncookedStewVegetables",
+    "CraftedResultCount": 1,
+    "DurationMinutes": 20,
+    "CraftingAudio": "",
+    "AppliedSkill": "Cooking",
+    "ImprovedSkill": "Cooking",
+    "RequiredPowder": [
+      {
+        "Powder": "POWDER_Flour",
+        "QuantityInKilograms": 0.05
+      }
+    ],
+    "RequiredLiquid": [
+      {
+        "Liquid": "LIQUID_Broth",
+        "VolumeInLitres": 0.4
+      }
+    ]
+  }
+}

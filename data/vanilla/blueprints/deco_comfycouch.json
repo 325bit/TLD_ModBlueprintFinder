@@ -1,0 +1,32 @@
+{
+  "Name": "BLUEPRINT_DECO_ComfyCouch",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Hardwood",
+      "Count": 15
+    },
+    {
+      "Item": "GEAR_LeatherHideDried",
+      "Count": 4
+    },
+    {
+      "Item": "GEAR_PtarmiganFeathers",
+      "Count": 16
+    },
+    {
+      "Item": "GEAR_GutDried",
+      "Count": 5
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "FurnitureWorkbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "OBJ_Rustic_Couch_Leather_A_Prefab",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 960,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

@@ -1,0 +1,24 @@
+{
+  "Name": "BLUEPRINT_GEAR_HookAndLine_B",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Hook",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_Line",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "Anywhere",
+  "RequiresLitFire": false,
+  "RequiresLight": false,
+  "CraftedResult": "GEAR_HookAndLine",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 10,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

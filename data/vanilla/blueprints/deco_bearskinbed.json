@@ -1,0 +1,32 @@
+{
+  "Name": "BLUEPRINT_DECO_BearSkinBed",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Hardwood",
+      "Count": 18
+    },
+    {
+      "Item": "GEAR_GutDried",
+      "Count": 4
+    },
+    {
+      "Item": "GEAR_BearHideDried",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_PtarmiganFeathers",
+      "Count": 16
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "FurnitureWorkbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "OBJ_Rustic_Bed_C_Prefab",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 1440,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

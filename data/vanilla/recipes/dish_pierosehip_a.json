@@ -1,0 +1,43 @@
+{
+  "RecipeName": "BLUEPRINT_DISH_PieRoseHip_A",
+  "RecipeDescription": "",
+  "RecipeIcon": "",
+  "RequiredSkillLevel": 0,
+  "AllowedCookingPots": [],
+  "BlueprintData": {
+    "Name": "BLUEPRINT_DISH_PieRoseHip_A",
+    "RequiredGear": [
+      {
+        "Item": "GEAR_RoseHip",
+        "Count": 8
+      }
+    ],
+    "RequiredTool": "",
+    "OptionalTools": [],
+    "RequiredCraftingLocation": "Anywhere",
+    "RequiresLitFire": true,
+    "RequiresLight": false,
+    "CraftedResult": "GEAR_UncookedPieRoseHip",
+    "CraftedResultCount": 1,
+    "DurationMinutes": 20,
+    "CraftingAudio": "",
+    "AppliedSkill": "Cooking",
+    "ImprovedSkill": "Cooking",
+    "RequiredPowder": [
+      {
+        "Powder": "POWDER_Flour",
+        "QuantityInKilograms": 0.2
+      }
+    ],
+    "RequiredLiquid": [
+      {
+        "Liquid": "LIQUID_WaterPotable",
+        "VolumeInLitres": 0.1
+      },
+      {
+        "Liquid": "LIQUID_CookingOil",
+        "VolumeInLitres": 0.05
+      }
+    ]
+  }
+}

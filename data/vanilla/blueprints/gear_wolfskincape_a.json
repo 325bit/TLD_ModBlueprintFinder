@@ -1,0 +1,28 @@
+{
+  "Name": "BLUEPRINT_GEAR_WolfSkinCape_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_WolfPeltDried",
+      "Count": 4
+    },
+    {
+      "Item": "GEAR_GutDried",
+      "Count": 4
+    }
+  ],
+  "RequiredTool": "GEAR_Knife",
+  "OptionalTools": [
+    "GEAR_Hatchet",
+    "GEAR_KnifeImprovised",
+    "GEAR_HatchetImprovised"
+  ],
+  "RequiredCraftingLocation": "Workbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_WolfSkinCape",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 3000,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

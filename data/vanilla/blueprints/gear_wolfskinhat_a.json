@@ -1,0 +1,26 @@
+{
+  "Name": "BLUEPRINT_GEAR_WolfSkinHat_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_WolfPeltDried",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_GutDried",
+      "Count": 2
+    }
+  ],
+  "RequiredTool": "GEAR_Knife",
+  "OptionalTools": [
+    "GEAR_Hatchet"
+  ],
+  "RequiredCraftingLocation": "Workbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_WolfSkinHat",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 2000,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

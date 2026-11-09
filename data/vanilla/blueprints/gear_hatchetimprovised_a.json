@@ -1,0 +1,24 @@
+{
+  "Name": "BLUEPRINT_GEAR_HatchetImprovised_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_ScrapMetal",
+      "Count": 5
+    },
+    {
+      "Item": "GEAR_Cloth",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "GEAR_Hammer",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "Forge",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_HatchetImprovised",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 240,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

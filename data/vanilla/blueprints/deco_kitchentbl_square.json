@@ -1,0 +1,20 @@
+{
+  "Name": "BLUEPRINT_DECO_KitchenTbl_Square",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Hardwood",
+      "Count": 8
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "FurnitureWorkbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "OBJ_Rustic_Table_Square_A_Prefab",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 420,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

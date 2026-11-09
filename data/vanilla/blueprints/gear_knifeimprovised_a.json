@@ -1,0 +1,24 @@
+{
+  "Name": "BLUEPRINT_GEAR_KnifeImprovised_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_ScrapMetal",
+      "Count": 3
+    },
+    {
+      "Item": "GEAR_Cloth",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "GEAR_Hammer",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "Forge",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_KnifeImprovised",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 180,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

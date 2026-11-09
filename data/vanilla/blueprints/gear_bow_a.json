@@ -1,0 +1,28 @@
+{
+  "Name": "BLUEPRINT_GEAR_Bow_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_MapleSaplingDried",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_GutDried",
+      "Count": 2
+    }
+  ],
+  "RequiredTool": "GEAR_Knife",
+  "OptionalTools": [
+    "GEAR_Hatchet",
+    "GEAR_KnifeImprovised",
+    "GEAR_HatchetImprovised"
+  ],
+  "RequiredCraftingLocation": "Workbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_Bow",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 600,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

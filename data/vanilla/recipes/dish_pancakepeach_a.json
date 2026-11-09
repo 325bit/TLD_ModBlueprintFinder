@@ -1,0 +1,47 @@
+{
+  "RecipeName": "BLUEPRINT_DISH_PancakePeach_A",
+  "RecipeDescription": "",
+  "RecipeIcon": "",
+  "RequiredSkillLevel": 0,
+  "AllowedCookingPots": [],
+  "BlueprintData": {
+    "Name": "BLUEPRINT_DISH_PancakePeach_A",
+    "RequiredGear": [
+      {
+        "Item": "GEAR_AcornGrounds",
+        "Count": 1
+      },
+      {
+        "Item": "GEAR_MapleSyrup",
+        "Quantity": 0.05,
+        "Units": "Kilograms"
+      },
+      {
+        "Item": "GEAR_PinnacleCanPeaches",
+        "Quantity": 0.5,
+        "Units": "Kilograms"
+      }
+    ],
+    "RequiredTool": "",
+    "OptionalTools": [],
+    "RequiredCraftingLocation": "Anywhere",
+    "RequiresLitFire": true,
+    "RequiresLight": false,
+    "CraftedResult": "GEAR_UncookedPancakePeach",
+    "CraftedResultCount": 1,
+    "DurationMinutes": 8,
+    "CraftingAudio": "",
+    "AppliedSkill": "Cooking",
+    "ImprovedSkill": "Cooking",
+    "RequiredLiquid": [
+      {
+        "Liquid": "LIQUID_WaterPotable",
+        "VolumeInLitres": 0.1
+      },
+      {
+        "Liquid": "LIQUID_CookingOil",
+        "VolumeInLitres": 0.05
+      }
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "Name": "BLUEPRINT_GEAR_Torch_B",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Stick",
+      "Count": 3
+    },
+    {
+      "Item": "GEAR_Cloth",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "",
+  "OptionalTools": [
+    "GEAR_SimpleTools",
+    "GEAR_HighQualityTools"
+  ],
+  "RequiredCraftingLocation": "Anywhere",
+  "RequiresLitFire": false,
+  "RequiresLight": false,
+  "CraftedResult": "GEAR_Torch",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 15,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None",
+  "RequiredLiquid": [
+    {
+      "Liquid": "LIQUID_Kerosene",
+      "VolumeInLitres": 0.1
+    }
+  ]
+}

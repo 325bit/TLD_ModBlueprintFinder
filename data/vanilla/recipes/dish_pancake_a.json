@@ -1,0 +1,44 @@
+{
+  "RecipeName": "BLUEPRINT_DISH_Pancake_A",
+  "RecipeDescription": "",
+  "RecipeIcon": "",
+  "RequiredSkillLevel": 0,
+  "AllowedCookingPots": [],
+  "BlueprintData": {
+    "Name": "BLUEPRINT_DISH_Pancake_A",
+    "RequiredGear": [
+      {
+        "Item": "GEAR_MapleSyrup",
+        "Quantity": 0.05,
+        "Units": "Kilograms"
+      }
+    ],
+    "RequiredTool": "",
+    "OptionalTools": [],
+    "RequiredCraftingLocation": "Anywhere",
+    "RequiresLitFire": true,
+    "RequiresLight": false,
+    "CraftedResult": "GEAR_UncookedPancake",
+    "CraftedResultCount": 1,
+    "DurationMinutes": 5,
+    "CraftingAudio": "",
+    "AppliedSkill": "Cooking",
+    "ImprovedSkill": "Cooking",
+    "RequiredPowder": [
+      {
+        "Powder": "POWDER_Flour",
+        "QuantityInKilograms": 0.125
+      }
+    ],
+    "RequiredLiquid": [
+      {
+        "Liquid": "LIQUID_WaterPotable",
+        "VolumeInLitres": 0.15
+      },
+      {
+        "Liquid": "LIQUID_CookingOil",
+        "VolumeInLitres": 0.05
+      }
+    ]
+  }
+}

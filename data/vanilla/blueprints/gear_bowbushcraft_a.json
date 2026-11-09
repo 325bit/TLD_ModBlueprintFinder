@@ -1,0 +1,28 @@
+{
+  "Name": "BLUEPRINT_GEAR_BowBushcraft_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_BirchSapling",
+      "Count": 2
+    },
+    {
+      "Item": "GEAR_GutDried",
+      "Count": 2
+    }
+  ],
+  "RequiredTool": "GEAR_Knife",
+  "OptionalTools": [
+    "GEAR_Hatchet",
+    "GEAR_KnifeImprovised",
+    "GEAR_HatchetImprovised"
+  ],
+  "RequiredCraftingLocation": "Workbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_Bow_Bushcraft",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 600,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

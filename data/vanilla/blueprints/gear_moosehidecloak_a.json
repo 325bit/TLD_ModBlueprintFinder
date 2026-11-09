@@ -1,0 +1,28 @@
+{
+  "Name": "BLUEPRINT_GEAR_MooseHideCloak_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_MooseHideDried",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_GutDried",
+      "Count": 4
+    }
+  ],
+  "RequiredTool": "GEAR_Knife",
+  "OptionalTools": [
+    "GEAR_Hatchet",
+    "GEAR_KnifeImprovised",
+    "GEAR_HatchetImprovised"
+  ],
+  "RequiredCraftingLocation": "Workbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_MooseHideCloak",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 2000,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

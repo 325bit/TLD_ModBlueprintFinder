@@ -1,0 +1,32 @@
+{
+  "Name": "BLUEPRINT_DECO_ComfyChair",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Hardwood",
+      "Count": 8
+    },
+    {
+      "Item": "GEAR_LeatherHideDried",
+      "Count": 2
+    },
+    {
+      "Item": "GEAR_PtarmiganFeathers",
+      "Count": 8
+    },
+    {
+      "Item": "GEAR_GutDried",
+      "Count": 3
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "FurnitureWorkbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "OBJ_Rustic_Chair_Leather_A_Prefab",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 780,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

@@ -1,0 +1,30 @@
+{
+  "Name": "BLUEPRINT_GEAR_BearSpear_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_MapleSaplingDried",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_SpearHead",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "GEAR_Knife",
+  "OptionalTools": [
+    "GEAR_HatchetImprovised",
+    "GEAR_Hatchet",
+    "GEAR_KnifeImprovised",
+    "GEAR_KnifeScrapMetal",
+    "GEAR_JeremiahKnife"
+  ],
+  "RequiredCraftingLocation": "Workbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_BearSpear",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 150,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

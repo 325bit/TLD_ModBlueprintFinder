@@ -1,0 +1,26 @@
+{
+  "Name": "BLUEPRINT_GEAR_RabbitskinHat_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_RabbitPeltDried",
+      "Count": 3
+    },
+    {
+      "Item": "GEAR_GutDried",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "GEAR_SewingKit",
+  "OptionalTools": [
+    "GEAR_HookAndLine"
+  ],
+  "RequiredCraftingLocation": "Workbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_RabbitskinHat",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 420,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

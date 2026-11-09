@@ -1,0 +1,43 @@
+{
+  "RecipeName": "BLUEPRINT_DISH_BarPemmican_A",
+  "RecipeDescription": "",
+  "RecipeIcon": "",
+  "RequiredSkillLevel": 0,
+  "AllowedCookingPots": [],
+  "BlueprintData": {
+    "Name": "BLUEPRINT_DISH_BarPemmican_A",
+    "RequiredGear": [
+      {
+        "Item": "GEAR_CuredMeat",
+        "Quantity": 0.5,
+        "Units": "Kilograms"
+      },
+      {
+        "Item": "GEAR_RoseHip",
+        "Count": 15
+      },
+      {
+        "Item": "GEAR_AnimalFat",
+        "Quantity": 0.5,
+        "Units": "Kilograms"
+      }
+    ],
+    "RequiredTool": "",
+    "OptionalTools": [],
+    "RequiredCraftingLocation": "Anywhere",
+    "RequiresLitFire": true,
+    "RequiresLight": false,
+    "CraftedResult": "GEAR_UncookedBarPemmican",
+    "CraftedResultCount": 1,
+    "DurationMinutes": 10,
+    "CraftingAudio": "",
+    "AppliedSkill": "Cooking",
+    "ImprovedSkill": "Cooking",
+    "RequiredPowder": [
+      {
+        "Powder": "POWDER_Salt",
+        "QuantityInKilograms": 0.05
+      }
+    ]
+  }
+}

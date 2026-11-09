@@ -1,0 +1,24 @@
+{
+  "Name": "BLUEPRINT_DECO_DisplayShelf_C",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Hardwood",
+      "Count": 10
+    },
+    {
+      "Item": "GEAR_ReclaimedWoodB",
+      "Count": 2
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "FurnitureWorkbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "CONTAINER_Rustic_Display_Shelf_C",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 540,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

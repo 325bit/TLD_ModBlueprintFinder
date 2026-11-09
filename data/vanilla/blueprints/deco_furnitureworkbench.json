@@ -1,0 +1,20 @@
+{
+  "Name": "BLUEPRINT_DECO_FurnitureWorkbench",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Softwood",
+      "Count": 10
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "Anywhere",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "INTERACTIVE_FurnitureWorkbench",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 240,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

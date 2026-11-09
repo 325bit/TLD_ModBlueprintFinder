@@ -1,0 +1,26 @@
+{
+  "Name": "BLUEPRINT_GEAR_DeerSkinBoots_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_LeatherHideDried",
+      "Count": 2
+    },
+    {
+      "Item": "GEAR_GutDried",
+      "Count": 4
+    }
+  ],
+  "RequiredTool": "GEAR_SewingKit",
+  "OptionalTools": [
+    "GEAR_HookAndLine"
+  ],
+  "RequiredCraftingLocation": "Workbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_DeerSkinBoots",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 1500,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

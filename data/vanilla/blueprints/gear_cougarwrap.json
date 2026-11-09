@@ -1,0 +1,26 @@
+{
+  "Name": "BLUEPRINT_GEAR_CougarWrap",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_CougarHideDried",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_GutDried",
+      "Count": 2
+    }
+  ],
+  "RequiredTool": "GEAR_SewingKit",
+  "OptionalTools": [
+    "GEAR_HookAndLine"
+  ],
+  "RequiredCraftingLocation": "Workbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_CougarWrap",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 1400,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

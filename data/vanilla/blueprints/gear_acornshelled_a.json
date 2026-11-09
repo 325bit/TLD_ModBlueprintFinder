@@ -1,0 +1,20 @@
+{
+  "Name": "BLUEPRINT_GEAR_AcornShelled_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Acorn",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "Anywhere",
+  "RequiresLitFire": false,
+  "RequiresLight": false,
+  "CraftedResult": "GEAR_AcornShelled",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 10,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

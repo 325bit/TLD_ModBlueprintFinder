@@ -1,0 +1,24 @@
+{
+  "Name": "BLUEPRINT_DECO_SimpleChair",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Softwood",
+      "Count": 4
+    },
+    {
+      "Item": "GEAR_ReclaimedWoodB",
+      "Count": 2
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "FurnitureWorkbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "OBJ_Rustic_Chair_A_Prefab",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 240,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

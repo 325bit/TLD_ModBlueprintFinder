@@ -1,0 +1,27 @@
+{
+  "Name": "BLUEPRINT_GEAR_Snare_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_GutDried",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_ReclaimedWoodB",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "",
+  "OptionalTools": [
+    "GEAR_SimpleTools",
+    "GEAR_HighQualityTools"
+  ],
+  "RequiredCraftingLocation": "Workbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_Snare",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 30,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

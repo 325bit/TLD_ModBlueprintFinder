@@ -1,0 +1,30 @@
+{
+  "Name": "BLUEPRINT_GEAR_RifleAmmoSingle_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Bullet",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_RifleAmmoCasing",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "AmmoWorkbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_RifleAmmoSingle",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 5,
+  "CraftingAudio": "",
+  "AppliedSkill": "Gunsmithing",
+  "ImprovedSkill": "Gunsmithing",
+  "RequiredPowder": [
+    {
+      "Powder": "POWDER_Gunpowder",
+      "QuantityInKilograms": 0.01
+    }
+  ]
+}

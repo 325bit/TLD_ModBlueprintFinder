@@ -1,0 +1,51 @@
+{
+  "RecipeName": "BLUEPRINT_DISH_PieForagers_A",
+  "RecipeDescription": "",
+  "RecipeIcon": "",
+  "RequiredSkillLevel": 0,
+  "AllowedCookingPots": [],
+  "BlueprintData": {
+    "Name": "BLUEPRINT_DISH_PieForagers_A",
+    "RequiredGear": [
+      {
+        "Item": "GEAR_AcornGrounds",
+        "Count": 1
+      },
+      {
+        "Item": "GEAR_ReishiMushroom",
+        "Count": 4
+      },
+      {
+        "Item": "GEAR_Burdock",
+        "Count": 2
+      }
+    ],
+    "RequiredTool": "",
+    "OptionalTools": [],
+    "RequiredCraftingLocation": "Anywhere",
+    "RequiresLitFire": true,
+    "RequiresLight": false,
+    "CraftedResult": "GEAR_UncookedPieForagers",
+    "CraftedResultCount": 1,
+    "DurationMinutes": 20,
+    "CraftingAudio": "",
+    "AppliedSkill": "Cooking",
+    "ImprovedSkill": "Cooking",
+    "RequiredPowder": [
+      {
+        "Powder": "POWDER_Salt",
+        "QuantityInKilograms": 0.01
+      }
+    ],
+    "RequiredLiquid": [
+      {
+        "Liquid": "LIQUID_WaterPotable",
+        "VolumeInLitres": 0.1
+      },
+      {
+        "Liquid": "LIQUID_CookingOil",
+        "VolumeInLitres": 0.05
+      }
+    ]
+  }
+}

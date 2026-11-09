@@ -1,0 +1,31 @@
+{
+  "Name": "BLUEPRINT_GEAR_FishingLureC_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Acorn",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_CrowFeather",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_ScrapMetal",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "",
+  "OptionalTools": [
+    "GEAR_SimpleTools",
+    "GEAR_HighQualityTools"
+  ],
+  "RequiredCraftingLocation": "Workbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_FishingLureC",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 50,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

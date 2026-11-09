@@ -1,0 +1,40 @@
+{
+  "RecipeName": "BLUEPRINT_DISH_StewVenison_A",
+  "RecipeDescription": "",
+  "RecipeIcon": "",
+  "RequiredSkillLevel": 0,
+  "AllowedCookingPots": [],
+  "BlueprintData": {
+    "Name": "BLUEPRINT_DISH_StewVenison_A",
+    "RequiredGear": [
+      {
+        "Item": "GEAR_RawMeatDeer",
+        "Quantity": 0.5,
+        "Units": "Kilograms"
+      }
+    ],
+    "RequiredTool": "",
+    "OptionalTools": [],
+    "RequiredCraftingLocation": "Anywhere",
+    "RequiresLitFire": true,
+    "RequiresLight": false,
+    "CraftedResult": "GEAR_UncookedStewVenison",
+    "CraftedResultCount": 1,
+    "DurationMinutes": 20,
+    "CraftingAudio": "",
+    "AppliedSkill": "Cooking",
+    "ImprovedSkill": "Cooking",
+    "RequiredPowder": [
+      {
+        "Powder": "POWDER_Flour",
+        "QuantityInKilograms": 0.05
+      }
+    ],
+    "RequiredLiquid": [
+      {
+        "Liquid": "LIQUID_Broth",
+        "VolumeInLitres": 0.2
+      }
+    ]
+  }
+}

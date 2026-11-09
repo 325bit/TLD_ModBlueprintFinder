@@ -1,0 +1,31 @@
+{
+  "Name": "BLUEPRINT_GEAR_FishingLureD_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_WireBundle",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_CrowFeather",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_ScrapMetal",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "",
+  "OptionalTools": [
+    "GEAR_SimpleTools",
+    "GEAR_HighQualityTools"
+  ],
+  "RequiredCraftingLocation": "Workbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_FishingLureD",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 50,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

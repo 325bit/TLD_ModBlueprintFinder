@@ -1,0 +1,20 @@
+{
+  "Name": "BLUEPRINT_DECO_LowTable",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Hardwood",
+      "Count": 6
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "FurnitureWorkbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "OBJ_Rustic_Coffee_Table_A_Prefab",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 240,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

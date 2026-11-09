@@ -24,7 +24,8 @@ public static class BlueprintParser
         string containerPath,
         string entryPath,
         BlueprintSourceKind sourceKindHint,
-        byte[] jsonBytes)
+        byte[] jsonBytes,
+        bool isVanilla = false)
     {
         string text;
         try
@@ -65,13 +66,13 @@ public static class BlueprintParser
                 var first = root.EnumerateArray().FirstOrDefault();
                 if (first.ValueKind != JsonValueKind.Object)
                     return new ParseOutcome(null, "顶层数组内没有对象");
-                return Build(modName, containerPath, entryPath, sourceKindHint, first, text);
+                return Build(modName, containerPath, entryPath, sourceKindHint, first, text, isVanilla);
             }
 
             if (root.ValueKind != JsonValueKind.Object)
                 return new ParseOutcome(null, $"顶层不是对象（{root.ValueKind}）");
 
-            return Build(modName, containerPath, entryPath, sourceKindHint, root, text);
+            return Build(modName, containerPath, entryPath, sourceKindHint, root, text, isVanilla);
         }
     }
 
@@ -82,7 +83,8 @@ public static class BlueprintParser
         string entryPath,
         BlueprintSourceKind sourceKindHint,
         byte[] jsonBytes,
-        List<string> errors)
+        List<string> errors,
+        bool isVanilla = false)
     {
         var text = DecodeText(jsonBytes);
         if (string.IsNullOrWhiteSpace(text)) return Array.Empty<BlueprintRecord>();
@@ -114,7 +116,7 @@ public static class BlueprintParser
                 foreach (var item in root.EnumerateArray())
                 {
                     if (item.ValueKind != JsonValueKind.Object) { index++; continue; }
-                    var outcome = Build(modName, containerPath, $"{entryPath}[{index}]", sourceKindHint, item, text);
+                    var outcome = Build(modName, containerPath, $"{entryPath}[{index}]", sourceKindHint, item, text, isVanilla);
                     if (outcome.Record is not null) output.Add(outcome.Record);
                     else if (outcome.SkipReason is not null)
                         errors.Add($"{modName} :: {entryPath}[{index}] → {outcome.SkipReason}");
@@ -130,7 +132,7 @@ public static class BlueprintParser
                 return Array.Empty<BlueprintRecord>();
             }
 
-            var single = Build(modName, containerPath, entryPath, sourceKindHint, root, text);
+            var single = Build(modName, containerPath, entryPath, sourceKindHint, root, text, isVanilla);
             if (single.Record is not null) output.Add(single.Record);
             else if (single.SkipReason is not null)
                 errors.Add($"{modName} :: {entryPath} → {single.SkipReason}");
@@ -147,7 +149,8 @@ public static class BlueprintParser
         string entryPath,
         BlueprintSourceKind sourceKindHint,
         JsonElement root,
-        string rawText)
+        string rawText,
+        bool isVanilla = false)
     {
         // Step 1: detect the recipe wrapper - files under recipes/ nest the blueprint in BlueprintData.
         JsonElement blueprintObj;
@@ -245,6 +248,7 @@ public static class BlueprintParser
             ContainerPath = containerPath,
             EntryPath = entryPath,
             SourceKind = sourceKind,
+            IsVanilla = isVanilla,
             Name = name!,
             RecipeName = recipeName,
             RecipeDescription = recipeDesc,

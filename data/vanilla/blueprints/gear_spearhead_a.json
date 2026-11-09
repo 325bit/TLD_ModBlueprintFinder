@@ -1,0 +1,20 @@
+{
+  "Name": "BLUEPRINT_GEAR_SpearHead_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_ScrapMetal",
+      "Count": 2
+    }
+  ],
+  "RequiredTool": "GEAR_Hammer",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "Forge",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_SpearHead",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 90,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

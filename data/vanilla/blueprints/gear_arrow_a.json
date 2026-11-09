@@ -1,0 +1,31 @@
+{
+  "Name": "BLUEPRINT_GEAR_Arrow_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_ArrowShaft",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_ArrowHead",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_CrowFeather",
+      "Count": 3
+    }
+  ],
+  "RequiredTool": "",
+  "OptionalTools": [
+    "GEAR_SimpleTools",
+    "GEAR_HighQualityTools"
+  ],
+  "RequiredCraftingLocation": "Workbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_Arrow",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 90,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

@@ -10,3 +10,5 @@ publish/
 *_settings.json
 dist/
 TLDMBF_modcomponent_backup/
+# 导出脚本的 CAB 索引缓存（约 1 MB，可重建）
+tools/.cache/

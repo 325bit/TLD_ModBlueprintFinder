@@ -1,0 +1,20 @@
+{
+  "Name": "BLUEPRINT_DECO_Wood_Cylinder",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Softwood",
+      "Count": 6
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "Anywhere",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "OBJ_Wood_Cylinder_Art_Prefab",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 300,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

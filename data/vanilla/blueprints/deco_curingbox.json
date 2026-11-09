@@ -1,0 +1,26 @@
+{
+  "Name": "BLUEPRINT_DECO_CuringBox",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Hardwood",
+      "Count": 10
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "FurnitureWorkbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "INTERACTIVE_CuringBox",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 360,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None",
+  "RequiredPowder": [
+    {
+      "Powder": "POWDER_Salt",
+      "QuantityInKilograms": 8.0
+    }
+  ]
+}

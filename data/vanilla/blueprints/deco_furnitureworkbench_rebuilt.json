@@ -1,0 +1,24 @@
+{
+  "Name": "BLUEPRINT_DECO_FurnitureWorkbench_Rebuilt",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Softwood",
+      "Count": 15
+    },
+    {
+      "Item": "GEAR_Vice",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "FurnitureWorkbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "INTERACTIVE_WorkBench_Rebuilt",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 1080,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

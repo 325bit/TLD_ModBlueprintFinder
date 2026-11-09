@@ -1,0 +1,20 @@
+{
+  "Name": "BLUEPRINT_DECO_KitchenTbl_Rectangular",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Hardwood",
+      "Count": 10
+    }
+  ],
+  "RequiredTool": "GEAR_WoodworkingTools",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "FurnitureWorkbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "OBJ_Rustic_Table_A_Prefab",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 480,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

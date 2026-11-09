@@ -1,0 +1,20 @@
+{
+  "Name": "BLUEPRINT_GEAR_HeavyBandage_B",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_Cloth",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "Anywhere",
+  "RequiresLitFire": false,
+  "RequiresLight": false,
+  "CraftedResult": "GEAR_HeavyBandage",
+  "CraftedResultCount": 2,
+  "DurationMinutes": 10,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

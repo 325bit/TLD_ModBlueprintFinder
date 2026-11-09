@@ -1,0 +1,26 @@
+{
+  "Name": "BLUEPRINT_GEAR_WolfSkinPants_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_WolfPeltDried",
+      "Count": 4
+    },
+    {
+      "Item": "GEAR_GutDried",
+      "Count": 3
+    }
+  ],
+  "RequiredTool": "GEAR_Knife",
+  "OptionalTools": [
+    "GEAR_Hatchet"
+  ],
+  "RequiredCraftingLocation": "Workbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_WolfSkinPant",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 3500,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

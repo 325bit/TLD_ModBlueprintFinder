@@ -1,0 +1,20 @@
+{
+  "Name": "BLUEPRINT_GEAR_Tinder_D",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_NewsprintRoll",
+      "Count": 1
+    }
+  ],
+  "RequiredTool": "",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "Anywhere",
+  "RequiresLitFire": false,
+  "RequiresLight": false,
+  "CraftedResult": "GEAR_Tinder",
+  "CraftedResultCount": 4,
+  "DurationMinutes": 10,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "None"
+}

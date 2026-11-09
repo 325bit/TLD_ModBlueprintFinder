@@ -1,0 +1,28 @@
+{
+  "Name": "BLUEPRINT_GEAR_GunpowderCan_A",
+  "RequiredGear": [
+    {
+      "Item": "GEAR_StumpRemover",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_DustingSulfur",
+      "Count": 1
+    },
+    {
+      "Item": "GEAR_Charcoal",
+      "Count": 2
+    }
+  ],
+  "RequiredTool": "",
+  "OptionalTools": [],
+  "RequiredCraftingLocation": "AmmoWorkbench",
+  "RequiresLitFire": false,
+  "RequiresLight": true,
+  "CraftedResult": "GEAR_GunpowderCan",
+  "CraftedResultCount": 1,
+  "DurationMinutes": 30,
+  "CraftingAudio": "",
+  "AppliedSkill": "None",
+  "ImprovedSkill": "Gunsmithing"
+}
