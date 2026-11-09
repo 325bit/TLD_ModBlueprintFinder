@@ -263,10 +263,12 @@ TLD_ModBlueprintFinder/                ← 仓库根目录
     ├── Export/
     │   └── CsvExporter.cs             带 BOM 的 UTF-8 CSV
     ├── Editing/
-    │   └── ModBackup.cs               modcomponent 备份 + 条目写回（纯 BCL，可离线测）
+    │   ├── ModBackup.cs               备份：整包复制到 TLDMBF_modcomponent_backup\
+    │   └── ModComponentArchive.cs     容器内条目的增删改查（ZIP 重写内核 + 目录型分支）
     └── Ui/
         ├── MainForm.Ui.cs             控件与列定义（code-only，无 .resx）
-        └── MainForm.cs                事件、扫描、检索、设置持久化
+        ├── MainForm.cs                事件、扫描、检索、设置持久化
+        └── ContainerEditorForm.cs     容器编辑器窗口（增删改查的界面）
 ```
 
 分层原则：**界面层不做任何业务判断**，是否命中、为什么命中全部由 `Indexing` 决定；
@@ -354,6 +356,7 @@ GUI 正常启动并在自己旁边生成 `TLD_ModBlueprintFinder_settings.json`�
 5. **导出 CSV**（四组结果一次导出，UTF-8 带 BOM，Excel 直接开）或 **复制**详情到剪贴板。
    物品定义行沿用同一套列，末尾多一列 `物品定义JSON`（配方行该列为空）。
 6. **备份 / 就地改 JSON**：详情栏第二排按钮，详见 §10。
+7. **容器编辑器**：同一个按钮区里的「容器编辑器…」，对当前 modcomponent 里的文件增删改查，详见 §11。
 
 ### 命令行模式
 
@@ -421,7 +424,8 @@ TLD_ModBlueprintFinder.exe --path "F:\...\TheLongDark" --item GEAR_ScrapMetal
   会写文件的有三处：
   1. 程序所在目录的 `TLD_ModBlueprintFinder_settings.json`（记住上次路径与四个勾选项）；
   2. 程序所在目录 `TLDMBF_modcomponent_backup\` 下的备份（点「备份」或勾了自动备份时点「保存修改」）；
-  3. 用户自己点「保存修改」后写回的 `.modcomponent`（详见 §10）。
+  3. 用户自己点「保存修改」写回的 `.modcomponent`，以及容器编辑器里的新建 / 重命名 / 删除
+     （详见 §10、§11）。
   注意 1、2 的「程序所在目录」含义：把 exe 放进游戏根目录时，这两样都会落在游戏目录里，
   所以 README 里明确建议别放进去。要彻底不碰游戏目录，可以把配置改回 `ApplicationData`。
   路径取 `AppContext.BaseDirectory` 而不是 `Directory.GetCurrentDirectory()`：后者会被快捷方式的
@@ -470,7 +474,9 @@ TLD_ModBlueprintFinder.exe --path "F:\...\TheLongDark" --item GEAR_ScrapMetal
 ## 10. 备份与就地修改
 
 界面上的四个按钮（详情栏第二排）：编辑 JSON / 保存修改 / 备份该 modcomponent / 自动备份。
-代码在 `Editing/ModBackup.cs`（备份 + 写回，纯 BCL，可脱离 WinForms 单独测）与 `Ui/MainForm.cs`（编辑态）。
+这一节讲的是「改检索结果里的那一条」；要改整个容器（新增文件、删除文件、改名）见 §11。
+代码在 `Editing/ModBackup.cs`（备份）、`Editing/ModComponentArchive.cs`（条目读写，纯 BCL，
+可脱离 WinForms 单独测）与 `Ui/MainForm.cs`（编辑态）。
 
 ### 10.1 备份
 
@@ -543,3 +549,88 @@ JSON 校验 →（勾了自动备份就备份）→ 写回容器 → 退出编�
 `Editing/ModBackup.cs` 不依赖 WinForms，可以建控制台桩工程链接它跑真实容器（参考
 `projects/ContainerSorterStub` 的做法）。值得覆盖的点：备份命名与字节一致、写回后条目数不变、
 非目标条目哈希不变、BOM 保持、写不存在的条目要报错且原包仍可读、目录型容器走直接写文件。
+
+---
+
+## 11. 容器编辑器（增删改查）
+
+入口在详情栏第二排的「容器编辑器…」，窗口实现在 `Ui/ContainerEditorForm.cs`。
+打开时会带上当前选中行的容器与条目，直接落在正确的位置上；关闭后如果写过东西，
+主窗口自动重扫一遍（`AnyChange` 为真）。
+
+### 11.1 和行内编辑的分工
+
+| | 行内编辑（§10） | 容器编辑器（§11） |
+| --- | --- | --- |
+| 起点 | 检索结果里的某一行 | 某个 modcomponent |
+| 能看到什么 | 只有这一条 | 容器里的全部文件 |
+| 能做什么 | 改内容 | 新增 / 删除 / 重命名 / 改内容 |
+| 适合 | 顺手改个数值 | 摸结构、批量整理、加新配方 |
+
+两套都保留：顺着检索结果改一条是最常用的动作，把它挪进二级窗口反而绕远。
+
+### 11.2 四个操作对应的 API
+
+全部在 `Editing/ModComponentArchive.cs`，文件型容器走 ZIP 重写，目录型容器走文件系统，
+对外行为一致：
+
+| 操作 | API | 说明 |
+| --- | --- | --- |
+| 查 | `ListEntries` / `ReadContent` / `Exists` | 列条目（含目录）、读文本（含编码与二进制判定） |
+| 增 | `WriteText`（条目不存在时） | 父目录条目一并补上 |
+| 改 | `WriteText`（条目已存在时） | 保留原 BOM |
+| 删 | `Delete` | 文件型：重写包；目录型：删文件 + 收掉空目录 |
+| 重命名 | `Rename` | 内容原样搬运，不重新编码 |
+
+### 11.3 新建时把目录条目补齐
+
+ZIP 不要求目录条目，但不少解包工具（含 ModComponent 自己的解压流程）靠它还原结构。
+所以新增 `blueprints/sub/deep/x.json` 时，`blueprints/sub/` 与 `blueprints/sub/deep/`
+这两个缺失的目录条目会一起写进包里 —— **只补缺的，已有的不动**。
+
+### 11.4 二进制条目只读
+
+`bundle/` 里是贴图、字体、音频。判据是「内容含 NUL 字节」，命中就只显示一行说明、
+`ReadOnly = true`，避免把二进制当文本写回去。列表默认只列 `.json`，取消「只看 .json」才会看到它们。
+
+### 11.5 未保存的三道闸
+
+`_dirty` 一旦为真，以下三个动作都会先弹「保存 / 不保存 / 取消」：
+
+1. 在列表里切到别的条目；
+2. 切换顶部的容器；
+3. 关窗口。
+
+选「取消」时调用方必须中止：切条目会把选中拨回原处，切容器会把下拉框拨回 `_lastContainerIndex`。
+保存失败（校验没过又选了「否」、或写入抛异常）同样返回 false —— 不能因为保存失败就把用户的改动丢掉。
+
+**过滤不会丢内容**：当前条目被过滤掉且没有未保存改动时自动跳到第一条（让「过滤」等于「定位」）；
+有未保存改动时只清掉列表选中，编辑器内容原样留着，清空过滤就能找回来。
+
+### 11.6 新建模板
+
+按目录给骨架，避免建出一个游戏静默跳过的空文件：
+
+| 目标目录 | 模板 |
+| --- | --- |
+| `blueprints/` | `Name` + `RequiredGear` + `CraftedResult` + `DurationMinutes` + `RequiredCraftingLocation` |
+| `recipes/` | 外层 `RecipeName` / `RecipeDescription` / `RequiredSkillLevel` + 内层 `BlueprintData` |
+| `auto-mapped/` | `ModGenericComponent` + 两个本地化 key |
+
+容器里没有 `blueprints/` 但有 `recipes/` 时，默认路径会落在 `recipes/`；都没有才回落到 `blueprints/`。
+重名时默认路径自动加 `-2`、`-3`。
+
+### 11.7 怎么自测这段
+
+`ModComponentArchive` 不依赖 WinForms，控制台桩工程链接它就能跑真实容器。
+已覆盖 38 项（`analysis/EditStub`）：
+
+- 查：`ListEntries` 的文件数与 ZIP 一致、读文本、不存在返回 null；
+- 改：只有目标条目的哈希变化、其余条目逐条一致、ZIP 仍可完整读取、BOM 状态保持；
+- 增：条目出现、父目录条目补齐、既有条目不动；
+- 重命名：旧名消失 / 新名出现 / 内容哈希不变；
+- 删：条目消失、其余不动、ZIP 可读；
+- 错误路径：删不存在的条目抛错且**原包一个字节都没变**、重命名到自己抛错；
+- 路径校验：`..` / 盘符 / 非 `.json` / 非法字符全部拒绝；
+- 二进制识别：含 NUL 的条目 `IsBinary = true`、不返回文本；
+- 目录型容器：写入、建目录、重命名、删除、空目录回收。

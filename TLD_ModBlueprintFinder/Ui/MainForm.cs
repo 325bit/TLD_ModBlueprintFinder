@@ -116,7 +116,7 @@ public sealed partial class MainForm : Form
             var width = _split.Width;
             if (width <= 0) return;
 
-            _split.SplitterDistance = (int)(width * 0.62);
+            _split.SplitterDistance = (int)(width * 0.58);
             _split.Panel1MinSize = S(320);
             _split.Panel2MinSize = S(240);
         }
@@ -750,6 +750,51 @@ public sealed partial class MainForm : Form
 
     private void OnAutoBackupChanged(object? sender, EventArgs e) => SaveSettings();
 
+    /// <summary>
+    /// 打开容器编辑器：从「改一条」升级到「改一整个 modcomponent」。
+    /// 带上当前选中行的容器与条目，打开就落在正确的位置上。
+    /// </summary>
+    private void OnOpenEditorClick(object? sender, EventArgs e)
+    {
+        if (_report is null || _report.Containers.Count == 0)
+        {
+            MessageBox.Show(this, "请先点击「扫描 Mods」加载 modcomponent，再打开编辑器。",
+                "还没有可编辑的容器", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        if (_edit is not null)
+        {
+            MessageBox.Show(this, "正在编辑当前行，请先「保存修改」或「取消编辑」，再打开容器编辑器。",
+                "编辑未结束", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var row = CurrentRow(ActiveGrid());
+
+        try
+        {
+            using var editor = new ContainerEditorForm(
+                _report.Containers,
+                row?.ContainerPath,
+                row?.EntryPath,
+                _chkAutoBackup.Checked);
+
+            editor.ShowDialog(this);
+
+            if (!editor.AnyChange) return;
+
+            SetStatus("容器内容已改动，正在重新扫描…", Color.DarkOrange);
+            BeginScan(silent: true);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "打开容器编辑器时出错：\n\n" + ex.Message, "编辑器",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            SetStatus("打开容器编辑器失败：" + ex.Message, Color.Firebrick);
+        }
+    }
+
     private void OnBackupClick(object? sender, EventArgs e)
     {
         var row = CurrentRow(ActiveGrid());
@@ -862,7 +907,7 @@ public sealed partial class MainForm : Form
             if (_chkAutoBackup.Checked)
                 backupPath = ModBackup.Create(session.ContainerPath);
 
-            ModComponentWriter.SaveEntry(session.ContainerPath, session.EntryPath, text);
+            ModComponentArchive.WriteText(session.ContainerPath, session.EntryPath, text);
         }
         catch (Exception ex)
         {
@@ -956,6 +1001,7 @@ public sealed partial class MainForm : Form
         _btnDetect.Enabled = !busy;
         _btnSearch.Enabled = !busy;
         _btnExport.Enabled = !busy;
+        _btnOpenEditor.Enabled = !busy;
         UseWaitCursor = busy;
     }
 

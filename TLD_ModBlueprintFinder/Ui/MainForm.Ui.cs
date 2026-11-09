@@ -44,8 +44,10 @@ public sealed partial class MainForm
     // ── 备份 / 就地编辑 ──
     private readonly Button _btnEdit = new();
     private readonly Button _btnSaveEdit = new();
+    private readonly Button _btnOpenEditor = new();
     private readonly Button _btnBackup = new();
     private readonly CheckBox _chkAutoBackup = new();
+    private readonly ToolTip _tips = new();
 
     /// <summary>
     /// 逻辑像素 → 设备像素。
@@ -277,6 +279,12 @@ public sealed partial class MainForm
         _btnBackup.Enabled = false;
         _btnBackup.Click += OnBackupClick;
 
+        _btnOpenEditor.Text = "容器编辑器…";
+        _btnOpenEditor.AutoSize = true;
+        _btnOpenEditor.Margin = new Padding(0, S(2), S(6), 0);
+        _btnOpenEditor.Click += OnOpenEditorClick;
+        _tips.SetToolTip(_btnOpenEditor, "打开完整的 modcomponent JSON 编辑器，可以对容器里的文件增删改查。");
+
         _chkAutoBackup.Text = "自动备份";
         _chkAutoBackup.Checked = true;
         _chkAutoBackup.AutoSize = true;
@@ -285,6 +293,7 @@ public sealed partial class MainForm
 
         editFlow.Controls.Add(_btnEdit);
         editFlow.Controls.Add(_btnSaveEdit);
+        editFlow.Controls.Add(_btnOpenEditor);
         editFlow.Controls.Add(_btnBackup);
         editFlow.Controls.Add(_chkAutoBackup);
         editBar.Controls.Add(editFlow);

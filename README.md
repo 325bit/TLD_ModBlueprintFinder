@@ -1,6 +1,6 @@
 # 漫漫长夜mod配方搜索器 · TLD Mod Blueprint Finder
 
-![version](https://img.shields.io/badge/version-1.3.0-informational)
+![version](https://img.shields.io/badge/version-1.4.0-informational)
 
 ![game](https://img.shields.io/badge/The%20Long%20Dark-2.55-success)
 
@@ -47,12 +47,24 @@
 | --------------- | ----------------------------------------------------- |
 | 编辑 JSON         | 把这一条的原始 JSON 变成可编辑状态（配方和物品定义都能改），改完点「保存修改」 |
 | 保存修改            | 校验 JSON 后写回 modcomponent；解析不过会先问你要不要硬存                 |
+| 容器编辑器…          | 进到这个 modcomponent 里面，对全部 JSON 做增删改查                    |
 | 备份该 modcomponent | 只备份当前行所属的 modcomponent，不做任何修改                          |
-| 自动备份            | 勾选时「保存修改」会先备份一份再写（默认勾选，状态会记住）                         |
+| 自动备份            | 勾选时每次写入前都先备份一份（默认勾选，状态会记住）                          |
 
 备份放在 exe 同目录的 `TLDMBF_modcomponent_backup\`，文件名是 `<mod名>.modcomponent-<年月日_时分秒>`，改多少次都不会互相覆盖。整个容器是复制过去的，想还原直接把备份改回 `xxx.modcomponent` 丢回 `Mods` 即可。
 
 写入的做法是把 .modcomponent 整个重写一遍再替换，中途失败原包不会被动过。但还是**建议先关掉游戏**：游戏占着文件时写不进去，工具会直接报错；改完也要重启游戏，modcomponent 才会被重新加载。
+
+## 容器编辑器
+
+要改的不止一条时，点「容器编辑器…」直接进容器里操作：
+
+- 左上选 modcomponent，中间是文件列表，可以直接过滤路径、只看 `.json`
+- 右侧改内容，「保存修改」或 `Ctrl+S` 写回；「还原」丢掉改动重新读
+- 「新建 JSON」按目录给好骨架（`blueprints` / `recipes` / `auto-mapped` 三种）
+- 「重命名」「删除」都要二次确认，删除同样受「自动备份」保护
+
+新建文件时缺的上级目录会一并补进包里。`bundle/` 里的贴图、字体属于二进制，只读显示，不会被当成文本写回去。
 
 ## 界面
 
@@ -76,6 +88,12 @@
   </tr>      
   <tr>      
     <td align="center" colspan="2">「编辑 JSON」：直接改这一条，点「保存修改」写回 modcomponent；勾了自动备份会先留一份</td>      
+  </tr>      
+  <tr>      
+    <td align="center" colspan="2"><img src="docs/img/screenshot-editor.png" alt="容器编辑器"></td>      
+  </tr>      
+  <tr>      
+    <td align="center" colspan="2">容器编辑器：列出这个 modcomponent 里的全部文件，新建 / 重命名 / 删除 / 编辑都在这里</td>      
   </tr>      
 </table>
 
