@@ -7,21 +7,17 @@ using TLD_ModBlueprintFinder.Parsing;
 namespace TLD_ModBlueprintFinder;
 
 /// <summary>
-/// 无界面模式。用途有两个：
-///   1. 脚本化查询（方便截图存档、批量核对）；
-///   2. 无 GUI 环境下自测解析与检索逻辑是否正确。
-///
-/// 用法：
-///   TLD_ModBlueprintFinder.exe --cli --path "&lt;游戏根目录 或 Mods 目录&gt;" --item GEAR_AcornShelled
-///   可选：--mode auto|exact|fuzzy   --no-merge   --scan-only   --csv out.csv
+/// Headless mode, for two purposes: scripted queries (archiving, batch verification) and exercising the
+/// parser and search logic without a GUI.
+///   TLD_ModBlueprintFinder.exe --cli --path "&lt;game root or Mods&gt;" --item GEAR_AcornShelled
+/// Options: --mode auto|exact|fuzzy  --no-merge  --scan-only  --csv out.csv
 /// </summary>
 internal static class Cli
 {
     public static int Run(string[] args)
     {
-        // 控制台默认代码页可能是 GBK。WinExe 编译出来的进程没有控制台句柄，
-        // Console.OutputEncoding 会抛异常，此时改为直接包一层 UTF-8 写入器，
-        // 保证重定向到管道 / 文件时中文不乱码。
+        // The console code page may be GBK, and a WinExe process has no console handle at all, which makes
+        // Console.OutputEncoding throw. Fall back to a UTF-8 writer so redirected output stays readable.
         try
         {
             Console.OutputEncoding = Encoding.UTF8;
@@ -37,7 +33,7 @@ internal static class Cli
             }
             catch
             {
-                // 连标准输出都拿不到：只能放弃编码修正，功能本身不受影响
+                // No standard output at all: give up on encoding; the results themselves are unaffected
             }
         }
 
@@ -191,9 +187,11 @@ internal static class Cli
     {
         Console.WriteLine($"══════════ 查询：{outcome.Query} ══════════");
 
-        PrintSection("① 作为产物（制作它需要的蓝图）", outcome.AsProduct);
-        PrintSection("② 作为原料（消耗它的蓝图）", outcome.AsIngredient);
-        PrintSection("③ 作为工具（需要/可用它的蓝图）", outcome.AsTool);
+        PrintSection("① 作为产物（蓝图 blueprints/）", outcome.AsProduct);
+        PrintSection("② 作为原料（蓝图 blueprints/）", outcome.AsIngredient);
+        PrintSection("③ 作为工具（蓝图 + 食谱）", outcome.AsTool);
+        PrintSection("④ 作为产物（食谱 recipes/）", outcome.AsRecipeProduct);
+        PrintSection("⑤ 作为原料（食谱 recipes/）", outcome.AsRecipeIngredient);
         PrintDefinitions(outcome.Definitions);
 
         if (outcome.IsEmpty)
@@ -209,7 +207,7 @@ internal static class Cli
     private static void PrintDefinitions(List<DefinitionRow> rows)
     {
         Console.WriteLine();
-        Console.WriteLine($"④ 物品定义（auto-mapped 里的 JSON）  ——  {rows.Count} 份");
+        Console.WriteLine($"⑥ 物品定义（auto-mapped 里的 JSON）  ——  {rows.Count} 份");
 
         if (rows.Count == 0)
         {

@@ -6,13 +6,11 @@ using TLD_ModBlueprintFinder.Models;
 namespace TLD_ModBlueprintFinder.Ui;
 
 /// <summary>
-/// modcomponent JSON 编辑器 —— 对一个容器里的文件做增、删、改、查。
-///
-/// 和主窗口那个「选中一行 → 编辑它对应的那份 JSON」是互补关系：
-/// 那边是顺着检索结果改一条，这边是直接进容器里翻结构、加文件、删文件。
-///
-/// 所有写入都走 <see cref="ModComponentArchive"/> 的整包重写，
-/// 编辑器本身不缓存任何磁盘状态，每次读都从容器里取。
+/// modcomponent JSON editor - create, read, update and delete files inside one container.
+/// Complementary to the main window's "select a row, edit its JSON": that one edits a single entry found
+/// by search, this one opens the container to browse its structure and add or remove files.
+/// Every write goes through the whole-archive rewrite of <see cref="ModComponentArchive"/>, and the editor
+/// holds no disk state - each read goes back to the container.
 /// </summary>
 public sealed class ContainerEditorForm : Form
 {
@@ -21,10 +19,10 @@ public sealed class ContainerEditorForm : Form
     private readonly string? _initialContainerPath;
     private readonly string? _initialEntryPath;
 
-    /// <summary>本次会话里是否成功写入过。主窗口据此决定要不要重新扫描。</summary>
+    /// <summary>Whether anything was written in this session. The main window rescans when it is true.</summary>
     public bool AnyChange { get; private set; }
 
-    // ── 控件 ──
+    // Controls
     private readonly ComboBox _cmbContainer = new();
     private readonly TextBox _txtFilter = new();
     private readonly CheckBox _chkJsonOnly = new();
@@ -45,7 +43,7 @@ public sealed class ContainerEditorForm : Form
     private readonly ToolStripStatusLabel _lblStatus = new();
     private readonly ToolTip _tips = new();
 
-    // ── 状态 ──
+    // State
     private List<ArchiveEntry> _entries = new();
     private ArchiveEntry? _current;
     private string _original = "";
@@ -75,9 +73,7 @@ public sealed class ContainerEditorForm : Form
         ? (int)Math.Round(logical * DeviceDpi / 96.0)
         : logical;
 
-    // ────────────────────────────────────────────────────────────────────
-    // 界面
-    // ────────────────────────────────────────────────────────────────────
+    // Layout
 
     private void BuildUi()
     {
@@ -92,7 +88,7 @@ public sealed class ContainerEditorForm : Form
         Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
         ShowInTaskbar = false;
 
-        // ── 顶部：容器选择 + 过滤 ──
+        // Top: container selection + filter
         var top = new Panel { Dock = DockStyle.Top, Height = S(74), Padding = new Padding(S(12), S(8), S(12), 0) };
 
         var row1 = new TableLayoutPanel { Dock = DockStyle.Top, Height = S(30), ColumnCount = 4, RowCount = 1 };
@@ -156,7 +152,7 @@ public sealed class ContainerEditorForm : Form
         top.Controls.Add(row2);
         top.Controls.Add(row1);
 
-        // ── 中部：条目列表 + 编辑器 ──
+        // Middle: entry list + editor
         _split.Dock = DockStyle.Fill;
         _split.Orientation = Orientation.Vertical;
         _split.SplitterWidth = S(6);
@@ -201,7 +197,7 @@ public sealed class ContainerEditorForm : Form
         editorHost.Controls.Add(_lblCurrent);
         _split.Panel2.Controls.Add(editorHost);
 
-        // ── 底部：操作按钮 ──
+        // Bottom: actions
         var bottom = new TableLayoutPanel
         {
             Dock = DockStyle.Bottom,
@@ -257,7 +253,7 @@ public sealed class ContainerEditorForm : Form
         bottom.Controls.Add(flow, 0, 0);
         bottom.Controls.Add(_btnSave, 1, 0);
 
-        // ── 状态栏 ──
+        // Status bar
         _status.Dock = DockStyle.Bottom;
         _status.SizingGrip = false;
         _lblStatus.Text = "就绪。";
@@ -277,7 +273,7 @@ public sealed class ContainerEditorForm : Form
 
     private void OnFormLoad(object? sender, EventArgs e)
     {
-        // 列宽与分隔条位置都不受 AutoScaleMode.Dpi 管，必须等句柄创建后按实际 DPI 设
+        // Column widths and splitter positions are not covered by AutoScaleMode.Dpi; set them after the handle exists
         try
         {
             if (_split.Width > 0)
@@ -289,11 +285,12 @@ public sealed class ContainerEditorForm : Form
         }
         catch (ArgumentOutOfRangeException)
         {
-            // 窗口极小时忽略，SplitContainer 会保留默认限制
+            // Ignored on a tiny window: SplitContainer keeps its own limits
         }
 
-        // 第一列吃掉剩余宽度：三列都写死总宽会超出面板，列表底下就会多出一条横向滚动条。
-        // 还要预留垂直滚动条的宽度 —— 文件多了它一出现，横向滚动条就会跟着冒出来。
+        // The first column absorbs the remaining width: three hard-coded widths overflow the panel and add a
+        // horizontal scrollbar. The vertical scrollbar width must be reserved too - once it appears, so does the
+        // horizontal one.
         var fixedWidth = S(66) + S(94) + SystemInformation.VerticalScrollBarWidth + S(8);
         var pathWidth = Math.Max(S(200), _list.ClientSize.Width - fixedWidth);
 
@@ -313,9 +310,7 @@ public sealed class ContainerEditorForm : Form
         Margin = new Padding(0, S(4), S(4), 0)
     };
 
-    // ────────────────────────────────────────────────────────────────────
-    // 初始化与加载
-    // ────────────────────────────────────────────────────────────────────
+    // Initialization and loading
 
     private void Initialize(string? containerPath, string? entryPath)
     {
@@ -361,7 +356,7 @@ public sealed class ContainerEditorForm : Form
 
         if (!TryLeaveCurrent())
         {
-            // 用户取消了：把下拉框拨回上一个容器
+            // User cancelled: put the combo box back on the previous container
             _suppress = true;
             try { _cmbContainer.SelectedIndex = _lastContainerIndex; }
             finally { _suppress = false; }
@@ -448,26 +443,24 @@ public sealed class ContainerEditorForm : Form
 
         RefreshList();
 
-        // 当前条目还在列表里就保持选中（不重读，保住编辑器里的内容）
+        // The current entry is still listed: keep it selected and do not re-read, so the editor keeps its content
         if (_current is not null && SelectPath(_current.Path, reload: false)) return;
 
-        // 被过滤掉了：没有未保存改动就直接跳到第一条，让「过滤」等于「定位」
+        // Filtered out with no unsaved changes: jump to the first entry, so filtering also locates
         if (!_dirty && _list.Items.Count > 0)
         {
             SelectPath(((ArchiveEntry)_list.Items[0].Tag!).Path, reload: true);
             return;
         }
 
-        // 有未保存改动就别动编辑器 —— 内容留着，清空过滤就能找回来
+        // With unsaved changes, leave the editor alone - the content stays and clearing the filter finds it again
         var prev = _suppress;
         _suppress = true;
         try { _list.SelectedItems.Clear(); }
         finally { _suppress = prev; }
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 选中与加载
-    // ────────────────────────────────────────────────────────────────────
+    // Selection and loading
 
     private void OnListSelectionChanged(object? sender, EventArgs e)
     {
@@ -518,7 +511,7 @@ public sealed class ContainerEditorForm : Form
         return null;
     }
 
-    /// <summary>把条目内容读进编辑器。二进制条目只读展示，防止把贴图当文本写回去。</summary>
+    /// <summary>Loads entry content into the editor. Binary entries are read-only so a texture is never written back as text.</summary>
     private void LoadEntry(ArchiveEntry entry)
     {
         var container = SelectedContainer;
@@ -635,9 +628,7 @@ public sealed class ContainerEditorForm : Form
             : (_dirty ? "● " : "") + _current.Path + (editable ? "" : "    只读");
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 增
-    // ────────────────────────────────────────────────────────────────────
+    // New file
 
     private void OnNewClick(object? sender, EventArgs e)
     {
@@ -688,7 +679,7 @@ public sealed class ContainerEditorForm : Form
         SetStatus($"已新建 {path}" + (backup is null ? "" : $"，备份：{Path.GetFileName(backup)}"), Color.ForestGreen);
     }
 
-    /// <summary>新建时的默认路径：优先落在容器已有的目录里，避免凭空造一个游戏不认的结构。</summary>
+    /// <summary>Default path for a new file: prefer a folder the container already has, not an invented structure.</summary>
     private string SuggestNewPath()
     {
         var hasBlueprints = _entries.Any(e => StartsWithFolder(e.Path, "blueprints"));
@@ -715,8 +706,8 @@ public sealed class ContainerEditorForm : Form
     }
 
     /// <summary>
-    /// 新建文件的初始内容。按目录给一份能直接改的骨架 ——
-    /// 空文件会让 ModComponent 在加载时静默跳过，用户还以为自己建好了。
+    /// Initial content for a new file. Each folder gets a skeleton that already works - an empty file is
+    /// silently skipped by ModComponent, and the user thinks the file was created successfully.
     /// </summary>
     private static string TemplateFor(string path)
     {
@@ -770,9 +761,7 @@ public sealed class ContainerEditorForm : Form
 """;
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 改
-    // ────────────────────────────────────────────────────────────────────
+    // Save
 
     private bool SaveCurrent()
     {
@@ -839,9 +828,7 @@ public sealed class ContainerEditorForm : Form
         SetStatus($"已从 modcomponent 重新读取 {_current.Path}。", Color.DimGray);
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 重命名 / 删除
-    // ────────────────────────────────────────────────────────────────────
+    // Rename / delete
 
     private void OnRenameClick(object? sender, EventArgs e)
     {
@@ -945,9 +932,7 @@ public sealed class ContainerEditorForm : Form
         SetStatus($"已删除 {path}" + (backup is null ? "" : $"，备份：{Path.GetFileName(backup)}"), Color.ForestGreen);
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 备份 / 刷新
-    // ────────────────────────────────────────────────────────────────────
+    // Backup / refresh
 
     private void OnBackupClick(object? sender, EventArgs e)
     {
@@ -980,16 +965,14 @@ public sealed class ContainerEditorForm : Form
         LoadContainer(container, _current?.Path);
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 收尾
-    // ────────────────────────────────────────────────────────────────────
+    // Finish
 
     private void OnFormClosing(object? sender, FormClosingEventArgs e)
     {
         if (!TryLeaveCurrent()) e.Cancel = true;
     }
 
-    /// <summary>离开当前条目前把未保存的修改处理掉。返回 false 表示用户取消，调用方必须中止。</summary>
+    /// <summary>Handles unsaved changes before leaving the current entry. False means cancelled: the caller must abort.</summary>
     private bool TryLeaveCurrent()
     {
         if (!_dirty || _current is null) return true;
@@ -1058,13 +1041,11 @@ public sealed class ContainerEditorForm : Form
         public override string ToString() => $"{Summary.Name}    ·    {Summary.Path}";
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 单行输入框（WinForms 没有内置 InputBox）
-    // ────────────────────────────────────────────────────────────────────
+    // Single-line input box (WinForms has no built-in InputBox)
 
     /// <summary>
-    /// 弹一个带校验的单行输入框。校验不通过就地提示，不像原生 InputBox 那样
-    /// 关掉再重开一遍 —— 用户刚敲的路径不会丢。
+    /// Shows a validated single-line input box. Validation errors are reported in place instead of closing and
+    /// reopening the dialog as the native InputBox does, so the typed path survives.
     /// </summary>
     private static string? PromptText(
         IWin32Window owner,

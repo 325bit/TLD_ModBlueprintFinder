@@ -1,180 +1,184 @@
-# 缺陷分析报告 · BUG-001：切回【作为产物】后无法显示 sugara 的详情
+# BUG-001 - Detail panel stops updating after switching back to "as product"
 
-| 项目 | 内容 |
+| Field | Value |
 | --- | --- |
-| 缺陷编号 | BUG-001 |
-| 报告日期 | 2026-10-25 |
-| 涉及模块 | 界面层 · 右侧「详情 / 原始 JSON」面板（当时为三个页签共用） |
-| 严重级别 | 中（不崩溃、不损坏数据，但核心操作路径失效且无任何提示） |
-| 复现率 | 100%（`GEAR_SugarA` 的【作为产物】只有 1 行且开局即被选中，条件固定成立） |
-| 当前状态 | 已复现 → 已定位 → 已修复 → 已回归验证（修复版 v1.0.1；v1.1.0 起程序更名为 `TLD_ModBlueprintFinder.exe`） |
+| ID | BUG-001 |
+| Reported | 2026-10-25 |
+| Area | UI layer, right-hand "detail / raw JSON" panel (shared by every tab) |
+| Severity | Medium - no crash, no data loss, but a core path silently does nothing |
+| Reproduction rate | 100% (`GEAR_SugarA` has exactly one row in "as product", selected from the start) |
+| Status | Reproduced -> root-caused -> fixed -> regression-tested (fixed in 1.0.1; the executable was renamed `TLD_ModBlueprintFinder.exe` in 1.1.0) |
 
 ---
 
-## 1. 结论先说
+## 1. Summary
 
-**这不是数据问题，也不是检索问题，而是「详情面板归属状态缺失」导致的界面缺陷。**
+**This was neither a data problem nor a search problem. The detail panel had no idea which row it belonged to.**
 
-界面把「右侧详情该显示哪一行」寄存在一个隐式状态里 —— *上一次点过哪个格子*。
-详情面板由三个页签共用，切换页签时没有任何代码去把详情重新同步到「当前页签里选中的那一行」，
-点击一个「已经被选中」的行又不会产生任何选中变化事件，于是两条路径同时断掉，详情就卡在别的页签那一行上。
+The UI kept "which row should the detail panel show" in an implicit state: *which cell was clicked last*.
+The panel is shared by every tab, no code resynced it when the tab changed, and clicking a row that was
+already selected fires no selection event. Both paths were broken at once, so the panel stayed on the other
+tab's row.
 
-> 本报告记录的是 v1.0.0 的现场。v1.2.0 增加了第四个页签「④ 物品定义」，
-> 共用的仍是同一格详情面板与同一套 `IDetailRow` 同步逻辑 —— 新增页签不改变本节结论。
+> This report describes the 1.0.0 build. Later versions added group 4/5 tabs and the definition tab, but the
+> panel is still one shared control driven by the same `IDetailRow` sync path - the conclusion stands.
+> Root cause and fix are summarised in `DEVELOPMENT.md` §7.4 and §10.
 
 ---
 
-## 2. 复现环境
+## 2. Environment
 
-| 项 | 值 |
+| Item | Value |
 | --- | --- |
-| 程序 | `TLD_ModBlueprintFinder/bin/Release/net8.0-windows/win-x64/publish/TLD_ModBlueprintFinder.exe` |
-| 系统 / DPI | Windows 10/11，125% 缩放，窗口 1396×899 |
-| 游戏目录 | `F:\SteamLibrary\steamapps\common\TheLongDark` |
-| 索引规模 | 46 个 modcomponent / 428 条蓝图 / 489 个物品 ID（139 ms） |
-| 复现方式 | 真实鼠标点击（Win32 `SetCursorPos` + `mouse_event`），非代码模拟选中 |
+| Build | `bin/Release/net8.0-windows/win-x64/publish/TLD_ModBlueprintFinder.exe` |
+| OS / DPI | Windows 10/11, 125% scaling, window 1396x899 |
+| Game folder | a Steam install of The Long Dark |
+| Index size | 46 modcomponents / 428 blueprints / 489 item IDs (139 ms) |
+| Method | real mouse clicks (Win32 `SetCursorPos` + `mouse_event`), not programmatic selection |
 
 ---
 
-## 3. 复现步骤
+## 3. Reproduction
 
-以下步骤中的坐标均为「窗口绝对坐标」，可原样重放。
+Coordinates are window-absolute and replay exactly.
 
-| # | 操作 | 观察点 |
+| # | Action | Observation |
 | --- | --- | --- |
-| 1 | 启动并检索 `GEAR_SugarA` | 状态栏：共命中 5 条（① 1 条 / ② 4 条 / ③ 0 条） |
-| 2 | 无需操作 | 默认停在【作为产物】，唯一一行 `sugara` 已选中，右侧显示 sugara 详情 |
-| 3 | 点【作为原料】页签（414,262） | 列表出现 4 行（beerbottle / RabbitRiverSallad / Rosehip Jam / yeast），详情自动变成 beerbottle |
-| 4 | 点 `RabbitRiverSallad` 行（300,339） | 详情切换为 RabbitRiverSallad ✔ |
-| 5 | 点回【作为产物】页签（319,262） | 列表只剩 `sugara` 一行，**仍高亮选中**；右侧详情**依旧是 RabbitRiverSallad** ✘ |
-| 6 | 点 `sugara` 这一行（300,315） | **详情没有任何变化**，仍是 RabbitRiverSallad ✘ |
+| 1 | Start and search `GEAR_SugarA` | status bar: 5 hits (1 product / 4 ingredients / 0 tools) |
+| 2 | nothing | stays on "as product", the single `sugara` row is selected, detail shows sugara |
+| 3 | click the "as ingredient" tab (414,262) | 4 rows appear (beerbottle / RabbitRiverSallad / Rosehip Jam / yeast), detail becomes beerbottle |
+| 4 | click the `RabbitRiverSallad` row (300,339) | detail switches to RabbitRiverSallad - correct |
+| 5 | click back to "as product" (319,262) | only `sugara` is listed and **still highlighted**, but the detail panel **still shows RabbitRiverSallad** |
+| 6 | click the `sugara` row (300,315) | **nothing changes**, still RabbitRiverSallad |
 
-第 1–2 步：初始状态（右侧为 sugara）
+Step 1-2, initial state:
 
-![初始状态](img/bug-1-initial.png)
+![initial state](img/bug-1-initial.png)
 
-第 4 步：详情已切到 RabbitRiverSallad
+Step 4, detail switched to RabbitRiverSallad:
 
-![切到原料蓝图](img/bug-2-switched.png)
+![switched](img/bug-2-switched.png)
 
-第 5 步：页签已切回【作为产物】，左侧高亮的是 sugara，右侧却是 RabbitRiverSallad
+Step 5, tab switched back, sugara highlighted on the left, RabbitRiverSallad on the right:
 
-![切回产物页签后详情未同步](img/bug-3-stale-after-tab-switch.png)
+![stale after tab switch](img/bug-3-stale-after-tab-switch.png)
 
-第 6 步：再点 sugara 那一行，截图与第 5 步**逐字节相同**（`bug-3` 与 `bug-4` 的 MD5 一致），证明点击完全没有效果
+Step 6, clicking the row again produces a screenshot **byte-identical** to step 5 (`bug-3` and `bug-4` have
+the same MD5), proving the click had no effect at all:
 
-![点击无反应](img/bug-4-click-noop.png)
+![click has no effect](img/bug-4-click-noop.png)
 
 ---
 
-## 4. 预期 / 实际对照
+## 4. Expected vs actual
 
-| 环节 | 预期行为 | 实际行为 | 结论 |
+| Step | Expected | Actual | Verdict |
 | --- | --- | --- | --- |
-| 检索后初始展示 | 显示 `sugara` 详情 | 显示 `sugara` 详情 | ✔ |
-| 切到【作为原料】并点其他蓝图 | 详情跟随所点行 | 跟随 | ✔ |
-| 切回【作为产物】 | 详情应显示该页签中已选中的那行（sugara） | 仍显示上一页签的 RabbitRiverSallad | ✘ |
-| 点击【作为产物】的 sugara 行 | 详情切回 sugara | 无任何变化 | ✘（用户报告的现象） |
-| 操作过程中的错误提示 | —— | 无提示、无报错、无日志 | 缺陷被完全静默 |
+| First render after search | sugara detail | sugara detail | pass |
+| Switch tab, click another blueprint | detail follows the clicked row | follows | pass |
+| Switch back to "as product" | detail shows the selected row of that tab (sugara) | previous tab's RabbitRiverSallad | fail |
+| Click the sugara row | detail returns to sugara | no change | fail (what the user reported) |
+| Any error surfaced | - | no message, no exception, no log | the defect is entirely silent |
 
-> 关键点：用户看到的「点不动」有两层，缺一不可地解释了这个体验 ——
-> **先看错了**（切页签时详情就没跟上），**再点也救不回来**（点已选中行不触发事件）。
-
----
-
-## 5. 复现条件提炼
-
-触发需要同时满足：
-
-1. 目标物品在**两个不同页签**里都有结果，且用户先访问了非默认页签 —— 对 `GEAR_SugarA`，是「1 个产物 + 4 个原料」。
-2. 回到【作为产物】时，目标行**仍处于选中状态**（未被清除）。
-3. 点击的是**同一行**（本项目里 `SelectFirstRow` 在检索完成后就已把第 0 行设为 CurrentRow）。
-
-第 3 条是这个缺陷「看起来像坏了」的核心：如果用户点的是同一行里的**另一列**，
-`CurrentCell` 变化会顺带触发选中事件，详情反而会刷新 —— 因而表现为「有时能切、有时不能切」的间歇性错觉。
-实测：点第 0 列（蓝图名）无效，点第 3 列（原料清单）有效。
+> The user's "the click does nothing" has two layers, and both are needed to explain the experience:
+> **the panel was already wrong** when the tab changed, and **clicking could not repair it** because clicking
+> an already-selected row fires no event.
 
 ---
 
-## 6. 根因分析
+## 5. Trigger conditions
 
-### 6.1 事件层（直接原因）：只监听 `SelectionChanged`，覆盖不到「点击已选中行」
+All three must hold:
 
-原实现中，三张表格的详情刷新全部挂在 `SelectionChanged` 上：
+1. The target item has results in **two different tabs**, and the user visits a non-default tab first -
+   for `GEAR_SugarA`: one product plus four ingredients.
+2. Coming back, the target row is **still selected** (never cleared).
+3. The click lands on **the same row** (`SelectFirstRow` already made row 0 the current row after the search).
+
+Condition 3 is why the bug looks intermittent: clicking **another column** of the same row changes
+`CurrentCell`, which drags a selection event along and refreshes the panel. Measured: column 0 (blueprint
+name) does nothing, column 3 (ingredient list) works.
+
+---
+
+## 6. Root cause
+
+### 6.1 Event layer (direct cause): only `SelectionChanged` was wired
 
 ```csharp
-// 修复前 Ui/MainForm.Ui.cs
-grid.SelectionChanged += onSelectionChanged;   // 仅此一处
+// Ui/MainForm.Ui.cs, before the fix
+grid.SelectionChanged += onSelectionChanged;   // the only subscription
 ```
 
-`DataGridView.SelectionChanged` 的语义是**选中集合发生变化**时才触发。当被点击的行已经是选中行、
-且点中的是当前单元格时，选中集合没有任何变化 → 事件不触发 → 详情不刷新。
+`DataGridView.SelectionChanged` fires when the **selection set** changes. Clicking a row that is already
+selected, on the current cell, changes nothing in that set, so the event never fires.
 
-**探针证据**（临时在三个网格上加日志，复现同一路径后抓取）：
+Probe log recorded on the same path:
 
 ```
-13:47:55.966  ShowDetail(gridIngredient)  ← 来自 _gridIngredient_SelectionChanged
+13:47:55.966  ShowDetail(gridIngredient)  <- from _gridIngredient_SelectionChanged
 13:47:55.980  SelectionChanged row=1
-13:47:56.025  CellClick row=1 col=0       ← 正常：选中变化 + 点击 都到齐
+13:47:56.025  CellClick row=1 col=0       <- normal: selection change and click both arrive
 
-13:47:57.559  CellClick row=0 col=0       ← 用户点 sugara：只有点击，没有 SelectionChanged
+13:47:57.559  CellClick row=0 col=0       <- user clicks sugara: click only, no SelectionChanged
 ```
 
-最后一行是缺陷的现场：`CellClick` 到了，但没有任何监听者；`SelectionChanged` 一次都没来。
+The last line is the defect: `CellClick` arrived with no listener, `SelectionChanged` never came.
 
-### 6.2 状态层（根本原因）：共享控件缺少「归属页签」这一维状态
+### 6.2 State layer (root cause): the shared control had no "owning tab" state
 
-详情框 `_txtDetail` 是三个页签共用的一格，但代码里没有任何地方记录
-「它现在显示的是哪个页签里哪一行」。展示逻辑只回答「刚点的是哪一行」，不回答「当前该显示哪一行」。
+`_txtDetail` is one box shared by every tab, and nothing recorded which tab and which row it was showing. The
+rendering code answered "which row was clicked" but never "which row should be shown".
 
-于是第 5 步切回【作为产物】时，代码没有任何机会去纠正 —— `SelectedIndexChanged` 上没有处理器。
-这一步即使不点任何东西，界面已经自相矛盾了（左侧选中 sugara，右侧写着 RabbitRiverSallad）。
+On step 5 there was therefore no opportunity to correct anything: `SelectedIndexChanged` had no handler. Even
+without clicking, the window was already self-contradictory - sugara selected on the left, RabbitRiverSallad
+written on the right.
 
-### 6.3 数据标识层（已核查，不是本缺陷原因）
+### 6.3 Data identity layer (checked, not the cause)
 
-按诊断要求逐项排除了「同一蓝图在不同视角下标识不一致」的可能：
+Each exclusion demanded by the diagnosis was verified:
 
-- 每个表格行绑定的是独立的 `SearchRow` 实例，携带自己的 `BlueprintRecord`，
-  详情文本由 `row.BuildDetailText()` 就地生成，不依赖任何全局「当前蓝图」变量。
-- 「作为产物」与「作为原料」出现的 `GEAR_sugara` 分属两条不同记录（`sugara` 与 `RabbitRiverSallad`），
-  索引里 `CraftedResult` / `RequiredGear[].Item` 分别建表，未混用。
-- 结论：**不存在标识错配**。移除事件缺失后，同一行点击必然得到同一份文本 —— 修复后的回归结果也印证了这一点。
+- Every grid row binds its own `SearchRow` instance carrying its own `BlueprintRecord`; the text comes from
+  `row.BuildDetailText()`, with no global "current blueprint" variable involved.
+- The `GEAR_sugara` hits in "as product" and "as ingredient" belong to two different records (`sugara` and
+  `RabbitRiverSallad`), and the index builds `CraftedResult` and `RequiredGear[].Item` as separate tables.
+- Conclusion: **no identity mismatch**. Once the missing events were added, the same row always produced the
+  same text, which the regression run confirmed.
 
 ---
 
-## 7. 修复方案（已实施）
+## 7. Fix
 
-三处改动，分别堵住事件的漏、补上状态的缺、并给空页签一个明确交代。
+Three changes: close the event gap, add the missing state, and give an empty tab something explicit to say.
 
-### 7.1 补一个「点击」事件（`Ui/MainForm.Ui.cs:348`）
+### 7.1 Add a click event (`Ui/MainForm.Ui.cs`)
 
 ```csharp
-// 两个事件都要绑，缺一不可：
-//   SelectionChanged —— 键盘上下键、程序化选中（此时选中项真的变了）
-//   CellClick        —— 鼠标点击已被选中的行（选中项没变，不会触发 SelectionChanged）
+// Both events are required:
+//   SelectionChanged - arrow keys and programmatic selection (the selection really changed)
+//   CellClick        - mouse click on the already-selected row (selection unchanged, no event)
 grid.SelectionChanged += onSelectionChanged;
 grid.CellClick += (_, e) => { if (e.RowIndex >= 0) ShowDetail(grid); };
 ```
 
-`CellClick` 在鼠标抬起时触发，与「选中是否变化」无关，因此恰好补上这块盲区；列头（`RowIndex = -1`）被过滤。
+`CellClick` fires on mouse-up regardless of selection changes, which is exactly the blind spot. Column headers
+(`RowIndex = -1`) are filtered out.
 
-### 7.2 页签切换时重新同步详情（`Ui/MainForm.cs:611`，绑定在 `Ui/MainForm.Ui.cs:202`）
+### 7.2 Resync on tab change (`Ui/MainForm.cs`, subscribed in `Ui/MainForm.Ui.cs`)
 
 ```csharp
 private void OnTabChanged(object? sender, EventArgs e)
 {
-    var grid = ActiveGrid();          // 当前页签对应的表格
+    var grid = ActiveGrid();          // the grid belonging to the current tab
 
     if (grid.Rows.Count == 0)
     {
         if (_outcome is { TotalHits: > 0 })
-            SetDetailText($"「{_tabs.SelectedTab?.Text}」没有匹配结果。\n\n" +
-                          "这是正常现象：该物品没有出现在这个位置。\n" +
-                          "切回其它页签即可继续查看已有结果。");
+            SetDetailText(EmptyTabHint);   // "no matching results in this tab, switch back" (UI text is Chinese)
         return;
     }
 
-    if (grid.CurrentRow is null)      // 页签首次显示时可能还没有当前行
+    if (grid.CurrentRow is null)      // a tab shown for the first time may have no current row
     {
         grid.ClearSelection();
         grid.Rows[0].Selected = true;
@@ -185,91 +189,97 @@ private void OnTabChanged(object? sender, EventArgs e)
 }
 ```
 
-顺带解决一个同源问题：切到**空页签**（例如 `GEAR_SugarA` 的【作为工具】）时，
-原先会继续显示别的页签的蓝图，容易被误读成「这一页的内容」。现在明确写成「没有匹配结果」。
+This also fixes a sibling problem: switching to an **empty tab** used to keep showing another tab's blueprint,
+which reads as content of that tab. It now says "no matching results".
 
-### 7.3 渲染去重（`Ui/MainForm.cs:574`）
+### 7.3 Skip identical renders (`Ui/MainForm.cs`)
 
 ```csharp
 var text = row.BuildDetailText();
-if (_txtDetail.Text == text) return;   // 已经在显示这一条，不重复渲染
+if (_txtDetail.Text == text) return;   // already showing this row
 ```
 
-选中变化与鼠标点击会先后触发一次渲染，不去重的话详情框的滚动位置会被连续重置
-（检索完成时 `SelectFirstRow` 就曾连续渲染 3 次），读长 JSON 时体验很差。去重同时保证了
-「重复点同一行」不会把你已经滚到的位置弹回顶部 —— 这才是点击无反应本该有的样子。
+Selection change and mouse click both trigger a render; without the guard the scroll position is reset twice
+(`SelectFirstRow` used to render three times in a row after a search), which is painful when reading long
+JSON. It also makes repeated clicks on the same row idempotent - which is what "the click does nothing"
+should mean.
 
-### 7.4 附带的健壮性处理
+### 7.4 Related hardening
 
-- `ShowDetail` 在 `CurrentRow` 为空时回退到第一条选中行（兼容 Ctrl 多选与程序化选中）。
-- 三个网格补上 `Name`（`gridProduct` / `gridIngredient` / `gridTool`），此后任何堆栈与日志都自带上下文。
+- `ShowDetail` falls back to the first selected row when `CurrentRow` is null (Ctrl multi-select, programmatic
+  selection).
+- The three grids got `Name`s (`gridProduct` / `gridIngredient` / `gridTool`), so any stack trace or log line
+  carries context.
 
 ---
 
-## 8. 回归验证
+## 8. Regression
 
-修复后在同一台机器、同一份数据上重放，并补充边界场景。
+Replayed on the same machine and data set, plus edge cases.
 
-| # | 用例 | 预期 | 实测 | 结果 |
+| # | Case | Expected | Observed | Result |
 | --- | --- | --- | --- | --- |
-| R1 | `GEAR_SugarA` → 进【作为原料】点 `RabbitRiverSallad` | 详情 = RabbitRiverSallad | 一致 | 通过 |
-| R2 | 切回【作为产物】（不点任何行） | 详情 = sugara | 一致（见下图） | 通过 |
-| R3 | 再点 sugara 行 | 详情保持 sugara，无变化 | 截图与 R2 逐字节一致 | 通过（幂等） |
-| R4 | 在【作为产物】点同一行**另一列** | 详情 = sugara | 一致 | 通过 |
-| R5 | 切到空的【作为工具】 | 明确提示「没有匹配结果」 | 一致 | 通过 |
-| R6 | 从【作为工具】切回【作为原料】 | 详情 = 该页签选中行（beerbottle） | 一致 | 通过 |
-| R7 | 界面内重新输入 `GEAR_Cloth` 回车 | 自动切到【作为原料】，详情 = 首行 | 一致 | 通过 |
-| R8 | `GEAR_Cloth` 点空的【作为产物】 | 显示「没有匹配结果」提示 | 一致 | 通过 |
-| R9 | 在 42 行列表里按 ↓↓ | 详情跟随到第 3 行 | 一致 | 通过 |
-| R10 | Ctrl+点击第 4 行 | 详情 = 该行（yeast） | 一致 | 通过 |
-| R11 | CLI 回归 `GEAR_SugarA / ScrapMetal / Hammer / UncookedBroth` | 1-4-0 / 3-28-0 / 1-0-26 / 1-0-0 | 完全一致 | 通过 |
+| R1 | `GEAR_SugarA` -> ingredient tab -> click `RabbitRiverSallad` | detail = RabbitRiverSallad | matches | pass |
+| R2 | switch back to product tab, click nothing | detail = sugara | matches | pass |
+| R3 | click the sugara row again | unchanged | screenshot byte-identical to R2 | pass (idempotent) |
+| R4 | click another **column** of the same row | detail = sugara | matches | pass |
+| R5 | switch to the empty tool tab | explicit "no matching results" | matches | pass |
+| R6 | from tool tab back to ingredient tab | detail = selected row (beerbottle) | matches | pass |
+| R7 | retype `GEAR_Cloth` and press Enter | jumps to ingredient tab, detail = first row | matches | pass |
+| R8 | `GEAR_Cloth`, open the empty product tab | "no matching results" | matches | pass |
+| R9 | in a 42-row list press Down twice | detail follows to row 3 | matches | pass |
+| R10 | Ctrl+click row 4 | detail = that row (yeast) | matches | pass |
+| R11 | CLI: `GEAR_SugarA` / `ScrapMetal` / `Hammer` / `UncookedBroth` | 1-4-0 / 3-28-0 / 1-0-26 / 1-0-0 | identical | pass |
 
-R2 修复后（左侧选中 sugara，右侧详情同步回到 sugara；与缺陷图对比即可看出差异）：
+R2 after the fix - selected sugara on the left, sugara in the detail panel:
 
-![修复后切回即同步](img/fix-1-detail-restored.png)
+![detail restored](img/fix-1-detail-restored.png)
 
-R5 空页签的显式提示：
+R5, the explicit empty-tab hint:
 
-![空页签提示](img/fix-2-empty-tab-hint.png)
+![empty tab hint](img/fix-2-empty-tab-hint.png)
 
-> 说明：`bug-1-initial.png` 与 `fix-1-detail-restored.png` 逐字节相同 —— 这正是修复的目标：
-> 回到【作为产物】时界面应当与刚检索出来时一模一样。
+> Note: `bug-1-initial.png` and `fix-1-detail-restored.png` are byte-identical, which is the point of the fix:
+> coming back to a tab must look exactly like the moment the search finished.
 
 ---
 
-## 9. 影响范围评估
+## 9. Blast radius
 
-同一根因可能波及的操作，已逐条确认：
+Every operation reachable through the same root cause was checked:
 
-| 场景 | 是否受影响 | 说明 |
+| Scenario | Affected | Note |
 | --- | --- | --- |
-| 点已选中行的第 0 列 | 受影响 | 本次报告的缺陷；已修 |
-| 点已选中行的其它列 | 未受影响 | `CurrentCell` 变化会连带触发选中事件；已修后仍正常 |
-| 页签来回切换（不点击） | 受影响 | 详情停留在旧页签的行；已修（7.2） |
-| 键盘 ↑↓ 切换行 | 未受影响 | 选中确实变化，事件正常；已回归 R9 |
-| Ctrl 多选 | 未受影响 | `CurrentRow` 跟随点击格；已回归 R10 |
-| 重新检索后 | 未受影响 | `SelectFirstRow` 重新设定当前行；已回归 R7 |
-| 导出 CSV / 复制详情 | 不受影响 | 不读取「当前选中」状态，读取的是 `row` 与 `_txtDetail.Text` |
+| Click column 0 of an already-selected row | yes | the reported defect; fixed |
+| Click another column of the same row | no | `CurrentCell` change drags a selection event; still fine after the fix |
+| Switch tabs without clicking | yes | detail stayed on the old tab; fixed by 7.2 |
+| Arrow keys | no | selection really changes; covered by R9 |
+| Ctrl multi-select | no | `CurrentRow` follows the clicked cell; covered by R10 |
+| After a new search | no | `SelectFirstRow` resets the current row; covered by R7 |
+| CSV export / copy detail | no | reads `row` and `_txtDetail.Text`, not "current selection" |
 
-界面层之外的解析与检索（`Parsing/`、`Indexing/`）没有改动，CLI 结果与修复前完全一致（R11）。
-
----
-
-## 10. 待验证推测
-
-以下两条**未在本轮取得证据**，不应当作结论使用：
-
-1. *推测*：若某个 mod 的 `CraftedResult` 与 `RequiredGear[].Item` 在同一 modcomponent 内互相指向同一 ID，
-   用户在两个页签里会看到「同名蓝图」分组，此时页签切换后详情是否仍可能混淆 —— 需要构造这样的 mod 才能验证。
-   现有语料里没有命中该形态的样本。
-2. *推测*：当结果集极大（行数上千）时，`_txtDetail.Text == text` 的整串比较成本会随文本增长而上升。
-   当前最大详情约 6 KB、428 条记录规模下实测无感；若将来索引扩大到万级，建议改用行引用比较。
+`Parsing/` and `Indexing/` were untouched, and CLI output is identical to the pre-fix build (R11).
 
 ---
 
-## 11. 交付物
+## 10. Unverified hypotheses
 
-- 源码修复：`TLD_ModBlueprintFinder/Ui/MainForm.cs`（574–645）、`TLD_ModBlueprintFinder/Ui/MainForm.Ui.cs`（202、347–348）
-- 已更新二进制：`TLD_ModBlueprintFinder/bin/Release/net8.0-windows/win-x64/publish/TLD_ModBlueprintFinder.exe`（现为 v1.1.0，约 260 KB）
-- 复现与验证截图：`docs/img/`
-- 复现脚本（可重放）：`D:\code\WorkBuddy_WorkSpace\The_Long_Dark\analysis\repro_click.py`
+Neither of these has evidence, and neither should be quoted as a conclusion:
+
+1. *Hypothesis*: if a mod's `CraftedResult` and `RequiredGear[].Item` point at the same ID within one
+   modcomponent, both tabs would show a row of the same name, and the panel might still be ambiguous after a
+   tab switch. Verifying it needs such a mod; no sample exists in the current corpus.
+2. *Hypothesis*: with very large result sets (thousands of rows) the whole-string comparison
+   `_txtDetail.Text == text` grows with the text. At today's 6 KB details and 428 records it is not
+   measurable; if the index ever reaches five digits, compare row references instead.
+
+---
+
+## 11. Deliverables
+
+- Source fix: `TLD_ModBlueprintFinder/Ui/MainForm.cs` (render, tab sync), `TLD_ModBlueprintFinder/Ui/MainForm.Ui.cs`
+  (both events, grid names)
+- Updated binary: the published single-file build in `dist\`
+- Reproduction and verification screenshots: `docs/img/`
+- Reproduction was driven by a Win32 click script (`SetCursorPos` + `mouse_event`) kept outside the repository;
+  the screenshots above are its output.

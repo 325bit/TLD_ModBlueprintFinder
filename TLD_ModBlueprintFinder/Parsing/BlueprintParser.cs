@@ -5,39 +5,19 @@ using TLD_ModBlueprintFinder.Models;
 namespace TLD_ModBlueprintFinder.Parsing;
 
 /// <summary>
-/// 把 modcomponent 里的一条 JSON 解析成 <see cref="BlueprintRecord"/>。
-///
-/// ── 数据来源与字段含义（来自对实机 Mods 目录 45 个 modcomponent / 416 份蓝图 JSON 的实测）──
-///
-/// 【两种文件布局】
-///   1. blueprints/&lt;名字&gt;.json  → 顶层对象就是蓝图本身
-///   2. recipes/&lt;名字&gt;.json     → 顶层是食谱包装对象，蓝图嵌在 "BlueprintData" 里，
-///                                 外层还有 RecipeName / RecipeDescription / AllowedCookingPots /
-///                                 RequiredSkillLevel 等烹饪专属字段
-///   两种都要解析，否则只做了 blueprints/ 的工具会漏掉全部「食谱」类配方。
-///
-/// 【核心字段】
-///   Name                → 蓝图 ID（游戏内唯一键，也是去重键）
-///   CraftedResult       → 产物物品 ID  ← 「作为产物」检索的匹配字段
-///   CraftedResultCount  → 产物数量
-///   RequiredGear[]      → 原料列表    ← 「作为原料」检索的匹配字段
-///       Item            → 物品 ID
-///       Count           → 件数（805 次）
-///       Quantity+Units  → 按重量/体积计（Kilograms 64 次、Count 105 次），与 Count 互斥
-///   RequiredPowder[]    → Powder + QuantityInKilograms
-///   RequiredLiquid[]    → Liquid + VolumeInLitres
-///   RequiredTool        → 单个字符串（空串表示没有，绝不能被当成物品 ID "        " 去索引）
-///   OptionalTools[]     → 可选工具列表
-///   RequiredCraftingLocation → Anywhere / Workbench / Fire / Forge / AmmoWorkbench / FurnitureWorkbench
-///   GunpowderRequired   → 旧字段名，8 处，新版叫 GunpowderKGRequired
+/// Turns one JSON entry from a modcomponent into a <see cref="BlueprintRecord"/>.
+/// Two layouts exist and both must be understood, or every cooking recipe is missed:
+/// blueprints/&lt;name&gt;.json holds the blueprint at the root, while recipes/&lt;name&gt;.json wraps it in
+/// "BlueprintData" and keeps RecipeName / AllowedCookingPots / RequiredSkillLevel outside.
+/// Field counts and mapping notes: docs/DEVELOPMENT.md §2.
 /// </summary>
 public static class BlueprintParser
 {
-    /// <summary>单条 JSON 的解析结果。</summary>
+    /// <summary>Parse result for a single JSON entry.</summary>
     public readonly record struct ParseOutcome(BlueprintRecord? Record, string? SkipReason);
 
     /// <summary>
-    /// 解析一条条目。<paramref name="rawJson"/> 为 null 表示读取失败，交由调用方记错误。
+    /// Parses one entry. A non-null SkipReason means no record was produced; the caller reports it.
     /// </summary>
     public static ParseOutcome Parse(
         string modName,
@@ -78,10 +58,10 @@ public static class BlueprintParser
         {
             var root = doc.RootElement;
 
-            // 顶层可能是数组（少数打包器会把多条蓝图塞进一个文件）
+            // The root may be an array: some packers put several blueprints in one file.
             if (root.ValueKind == JsonValueKind.Array)
             {
-                // 这里只返回第一条；调用方应改用 ParseMany。
+                // Only the first element is returned here; use ParseMany for files that may hold several.
                 var first = root.EnumerateArray().FirstOrDefault();
                 if (first.ValueKind != JsonValueKind.Object)
                     return new ParseOutcome(null, "顶层数组内没有对象");
@@ -95,7 +75,7 @@ public static class BlueprintParser
         }
     }
 
-    /// <summary>一个文件可能装了多条蓝图，这里统一展开。</summary>
+    /// <summary>A single file may hold several blueprints; this expands all of them.</summary>
     public static IReadOnlyList<BlueprintRecord> ParseMany(
         string modName,
         string containerPath,
@@ -159,9 +139,7 @@ public static class BlueprintParser
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 核心映射
-    // ────────────────────────────────────────────────────────────────────
+    // Core mapping
 
     private static ParseOutcome Build(
         string modName,
@@ -171,7 +149,7 @@ public static class BlueprintParser
         JsonElement root,
         string rawText)
     {
-        // ① 先判断是不是「食谱包装」：recipes/ 下的文件把蓝图塞进 BlueprintData
+        // Step 1: detect the recipe wrapper - files under recipes/ nest the blueprint in BlueprintData.
         JsonElement blueprintObj;
         string? recipeName = null;
         string? recipeDesc = null;
@@ -186,7 +164,7 @@ public static class BlueprintParser
             recipeName = JsonHelpers.GetString(root, "RecipeName", "NameID", "LocalizationKey");
             recipeDesc = JsonHelpers.GetString(root, "RecipeDescription", "DescriptionID");
 
-            // AllowedCookingPots 属于食谱层，但它是「以某物品为工具」的真实引用
+            // AllowedCookingPots lives on the recipe, but it is a real "this item as a tool" reference.
             foreach (var pot in JsonHelpers.GetArrayLike(root, "AllowedCookingPots", "AllowedCookingPotsList"))
             {
                 var id = JsonHelpers.AsString(pot);
@@ -206,18 +184,19 @@ public static class BlueprintParser
 
         var warnings = new List<string>();
 
-        // ② 蓝图 ID
+        // Step 2: blueprint ID.
         var name = JsonHelpers.GetString(blueprintObj, "Name", "BlueprintName", "ID", "Id");
         if (string.IsNullOrWhiteSpace(name))
         {
-            // 退化：用文件名兜底，但记录警告，方便用户知道这条不是规范数据
+            // Fall back to the file name but keep a warning, so the user knows the record is off-spec.
             name = Path.GetFileNameWithoutExtension(entryPath);
             warnings.Add("缺少 Name 字段，已用文件名兜底");
         }
 
-        // ③ 产物
+        // Step 3: product.
         var crafted = JsonHelpers.GetString(blueprintObj,
             "CraftedResult", "Result", "CraftedResultGearName", "ResultItem", "Output", "OutputItem");
+        // Without CraftedResult the record cannot answer "as a product": keep it, but flag the gap.
         if (string.IsNullOrWhiteSpace(crafted))
         {
             warnings.Add("缺少 CraftedResult 字段：无法参与「作为产物」检索");
@@ -227,18 +206,18 @@ public static class BlueprintParser
         var craftedCount = JsonHelpers.GetDouble(blueprintObj,
             "CraftedResultCount", "ResultCount", "OutputCount") ?? 1;
 
-        // ④ 原料
+        // Step 4: ingredients.
         var ingredients = new List<Ingredient>();
         ingredients.AddRange(ParseGearRequirements(blueprintObj, warnings));
         ingredients.AddRange(ParsePowderRequirements(blueprintObj, warnings));
         ingredients.AddRange(ParseLiquidRequirements(blueprintObj, warnings));
 
-        // ⑤ 工具
+        // Step 5: tools.
         var tools = new List<Ingredient>();
         tools.AddRange(ParseTools(blueprintObj, warnings));
         tools.AddRange(recipeExtraTools);
 
-        // ⑥ 额外条件（不能当原料索引，但玩家查配方时很关键）
+        // Step 6: extra requirements - not indexable as ingredients, but needed to plan the craft.
         var extras = new List<string>();
         var kerosene = JsonHelpers.GetDouble(blueprintObj, "KeroseneLitersRequired", "KeroseneRequired");
         if (kerosene is > 0) extras.Add($"煤油 {kerosene.Value:0.###} L");
@@ -284,10 +263,10 @@ public static class BlueprintParser
     }
 
     /// <summary>
-    /// RequiredGear：三种写法都要认。
-    ///   "GEAR_X"                                          → 件数 1
-    ///   { "Item": "GEAR_X", "Count": 3 }                   → 件数 3
-    ///   { "Item": "GEAR_X", "Quantity": 0.1, "Units": "Kilograms" } → 0.1 kg
+    /// RequiredGear accepts three shapes:
+    ///   "GEAR_X"                                                     - one item
+    ///   { "Item": "GEAR_X", "Count": 3 }                             - counts
+    ///   { "Item": "GEAR_X", "Quantity": 0.1, "Units": "Kilograms" }  - weight
     /// </summary>
     private static IEnumerable<Ingredient> ParseGearRequirements(JsonElement obj, List<string> warnings)
     {
@@ -318,7 +297,7 @@ public static class BlueprintParser
             var quantity = JsonHelpers.GetDouble(element, "Quantity", "Weight", "Mass", "Volume");
             var units = JsonHelpers.GetString(element, "Units", "Unit", "Measurement");
 
-            // Units=Count 时 Quantity 其实表示件数，归一化成 Count
+            // Units=Count means Quantity actually carries a count; normalize it into Count.
             if (quantity.HasValue && units is not null &&
                 (units.Equals("Count", StringComparison.OrdinalIgnoreCase) ||
                  units.Equals("Units", StringComparison.OrdinalIgnoreCase)))
@@ -330,7 +309,7 @@ public static class BlueprintParser
 
             if (!count.HasValue && !quantity.HasValue)
             {
-                // 两者都没有：按 1 件处理，但要留痕
+                // Neither present: assume one item, but leave a trace.
                 warnings.Add($"原料 {itemId} 未声明数量，按 1 件处理");
                 count = 1;
             }
@@ -346,7 +325,7 @@ public static class BlueprintParser
         }
     }
 
-    /// <summary>RequiredPowder：[{ "Powder": "POWDER_Salt", "QuantityInKilograms": 0.01 }]</summary>
+    /// <summary>RequiredPowder: [{ "Powder": "POWDER_Salt", "QuantityInKilograms": 0.01 }]</summary>
     private static IEnumerable<Ingredient> ParsePowderRequirements(JsonElement obj, List<string> warnings)
     {
         foreach (var element in JsonHelpers.GetArrayLike(obj, "RequiredPowder", "RequiredPowders"))
@@ -377,7 +356,7 @@ public static class BlueprintParser
         }
     }
 
-    /// <summary>RequiredLiquid：[{ "Liquid": "LIQUID_WaterPotable", "VolumeInLitres": 1.5 }]</summary>
+    /// <summary>RequiredLiquid: [{ "Liquid": "LIQUID_WaterPotable", "VolumeInLitres": 1.5 }]</summary>
     private static IEnumerable<Ingredient> ParseLiquidRequirements(JsonElement obj, List<string> warnings)
     {
         foreach (var element in JsonHelpers.GetArrayLike(obj, "RequiredLiquid", "RequiredLiquids"))
@@ -408,13 +387,13 @@ public static class BlueprintParser
         }
     }
 
-    /// <summary>RequiredTool（单值）/ OptionalTools（数组）。空串必须过滤掉。</summary>
+    /// <summary>RequiredTool (single value) / OptionalTools (array). Empty strings must be filtered out.</summary>
     private static IEnumerable<Ingredient> ParseTools(JsonElement obj, List<string> warnings)
     {
         foreach (var element in JsonHelpers.GetArrayLike(obj, "RequiredTool", "RequiredTools"))
         {
             var id = JsonHelpers.AsString(element);
-            if (string.IsNullOrWhiteSpace(id)) continue;   // "" 是「不需要工具」的写法
+            if (string.IsNullOrWhiteSpace(id)) continue;   // "" means "no tool required"
             yield return new Ingredient { ItemId = id, Kind = IngredientKind.Tool, Role = ToolRole.Required };
         }
 
@@ -426,16 +405,14 @@ public static class BlueprintParser
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 文本解码
-    // ────────────────────────────────────────────────────────────────────
+    // Text decoding
 
-    /// <summary>字节 → 文本。物品定义解析器（ItemDefinitionParser）复用同一套 BOM 处理。</summary>
+    /// <summary>Bytes to text. ItemDefinitionParser reuses the same BOM handling.</summary>
     internal static string DecodeText(byte[] bytes)
     {
         if (bytes.Length == 0) return string.Empty;
 
-        // UTF-16 / UTF-32 BOM 极少见，但出现了就得处理，否则整份文件解析失败
+        // UTF-16/UTF-32 BOMs are rare but fatal: ignoring them fails the whole file.
         if (bytes.Length >= 4 && bytes[0] == 0xFF && bytes[1] == 0xFE && bytes[2] == 0x00 && bytes[3] == 0x00)
             return Encoding.UTF32.GetString(bytes, 4, bytes.Length - 4);
         if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
@@ -446,7 +423,7 @@ public static class BlueprintParser
         var text = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: false)
             .GetString(bytes);
 
-        // UTF-8 BOM 解码后是 U+FEFF，JsonDocument 不接受，必须先剥掉
+        // A UTF-8 BOM decodes to U+FEFF, which JsonDocument rejects; strip it first.
         return text.TrimStart('\uFEFF');
     }
 }

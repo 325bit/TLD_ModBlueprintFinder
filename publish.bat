@@ -3,7 +3,7 @@ chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
 
-echo [1/2] 发布单文件自包含 exe（约 63 MB，目标机不需要装 .NET）...
+echo [1/2] 发布单文件自包含 exe（约 65 MB，目标机不需要装 .NET）...
 dotnet publish "TLD_ModBlueprintFinder\TLD_ModBlueprintFinder.csproj" -p:PublishProfile=SelfContainedSingleFile -v minimal --nologo
 if errorlevel 1 (
     echo.

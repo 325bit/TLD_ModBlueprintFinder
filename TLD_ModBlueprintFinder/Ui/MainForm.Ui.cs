@@ -4,12 +4,12 @@ using TLD_ModBlueprintFinder.Indexing;
 namespace TLD_ModBlueprintFinder.Ui;
 
 /// <summary>
-/// 主窗口的界面构建部分。
-/// 所有控件用代码创建（不使用 .resx），这样可以整份复制进任意 .NET 8 项目里直接编译。
+/// UI construction for the main window. Every control is created in code (no .resx), so this file can be
+/// copied into any .NET 8 project and compiled as is.
 /// </summary>
 public sealed partial class MainForm
 {
-    // ── 输入区 ──
+    // Input area
     private readonly TextBox _txtPath = new();
     private readonly TextBox _txtItem = new();
     private readonly Button _btnBrowse = new();
@@ -20,20 +20,24 @@ public sealed partial class MainForm
     private readonly CheckBox _chkMerge = new();
     private readonly CheckBox _chkSubFolders = new();
 
-    // ── 结果区 ──
+    // Result area
     private readonly TabControl _tabs = new();
     private readonly DataGridView _gridProduct = new() { Name = "gridProduct" };
     private readonly DataGridView _gridIngredient = new() { Name = "gridIngredient" };
     private readonly DataGridView _gridTool = new() { Name = "gridTool" };
+    private readonly DataGridView _gridRecipeProduct = new() { Name = "gridRecipeProduct" };
+    private readonly DataGridView _gridRecipeIngredient = new() { Name = "gridRecipeIngredient" };
     private readonly DataGridView _gridDefinition = new() { Name = "gridDefinition" };
     private readonly RichTextBox _txtDetail = new();
     private readonly SplitContainer _split = new();
-    private readonly TabPage _pageProduct = new("① 作为产物");
-    private readonly TabPage _pageIngredient = new("② 作为原料");
+    private readonly TabPage _pageProduct = new("① 作为产物（蓝图）");
+    private readonly TabPage _pageIngredient = new("② 作为原料（蓝图）");
     private readonly TabPage _pageTool = new("③ 作为工具");
-    private readonly TabPage _pageDefinition = new("④ 物品定义");
+    private readonly TabPage _pageRecipeProduct = new("④ 作为产物（食谱）");
+    private readonly TabPage _pageRecipeIngredient = new("⑤ 作为原料（食谱）");
+    private readonly TabPage _pageDefinition = new("⑥ 物品定义");
 
-    // ── 状态区 ──
+    // Status area
     private readonly StatusStrip _status = new();
     private readonly ToolStripStatusLabel _lblStatus = new();
     private readonly ToolStripStatusLabel _lblCounts = new();
@@ -41,7 +45,7 @@ public sealed partial class MainForm
     private readonly Button _btnExport = new();
     private readonly Button _btnCopy = new();
 
-    // ── 备份 / 就地编辑 ──
+    // Backup / in-place editing
     private readonly Button _btnEdit = new();
     private readonly Button _btnSaveEdit = new();
     private readonly Button _btnOpenEditor = new();
@@ -50,10 +54,9 @@ public sealed partial class MainForm
     private readonly ToolTip _tips = new();
 
     /// <summary>
-    /// 逻辑像素 → 设备像素。
-    /// 构造函数阶段（句柄未创建）直接返回逻辑值：此时 AutoScaleMode.Dpi 还没生效，
-    /// 手工乘 DPI 会和自动缩放叠乘，导致界面被放大两次。
-    /// 句柄创建之后才做换算，用于 AutoScale 管不到的量（DataGridView 列宽）。
+    /// Logical to device pixels. Before the handle exists, return the logical value: AutoScaleMode.Dpi has
+    /// not kicked in yet, and multiplying by DPI here would scale the UI twice.
+    /// After the handle exists the conversion serves sizes AutoScale does not cover (grid column widths).
     /// </summary>
     private int S(int logical)
     {
@@ -73,7 +76,7 @@ public sealed partial class MainForm
         AutoScaleDimensions = new SizeF(96F, 96F);
         Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
 
-        // ───────── 顶部输入区 ─────────
+        // Top input area
         var panelTop = new Panel
         {
             Dock = DockStyle.Top,
@@ -189,15 +192,15 @@ public sealed partial class MainForm
 
         gbQuery.Controls.Add(queryLayout);
 
-        // Dock=Top 的控件按 z-order 逆序排列：后添加的排在上面。
-        // 这里故意倒序添加（gbQuery → 间隔条 → gbPath），让「游戏路径」显示在第一行。
+        // Dock=Top controls stack in reverse z-order: the last one added sits on top. They are added in
+        // reverse (gbQuery -> spacer -> gbPath) so "game path" becomes the first row.
         panelTop.Controls.Add(gbQuery);
         panelTop.Controls.Add(new Panel { Dock = DockStyle.Top, Height = S(6) });
         panelTop.Controls.Add(gbPath);
 
-        // ───────── 中部结果区 ─────────
-        // 注意：Panel1MinSize / Panel2MinSize 不能在布局完成前设，
-        // 否则 SplitContainer 会用默认宽（150）去校验 SplitterDistance 并抛 ArgumentOutOfRange。
+        // Middle result area.
+        // Panel1MinSize / Panel2MinSize must not be set before layout finishes, or SplitContainer validates
+        // SplitterDistance against the default 150 and throws ArgumentOutOfRange.
         _split.Dock = DockStyle.Fill;
         _split.Orientation = Orientation.Vertical;
         _split.SplitterWidth = S(6);
@@ -206,10 +209,14 @@ public sealed partial class MainForm
         _pageProduct.Controls.Add(_gridProduct);
         _pageIngredient.Controls.Add(_gridIngredient);
         _pageTool.Controls.Add(_gridTool);
+        _pageRecipeProduct.Controls.Add(_gridRecipeProduct);
+        _pageRecipeIngredient.Controls.Add(_gridRecipeIngredient);
         _pageDefinition.Controls.Add(_gridDefinition);
         _tabs.TabPages.Add(_pageProduct);
         _tabs.TabPages.Add(_pageIngredient);
         _tabs.TabPages.Add(_pageTool);
+        _tabs.TabPages.Add(_pageRecipeProduct);
+        _tabs.TabPages.Add(_pageRecipeIngredient);
         _tabs.TabPages.Add(_pageDefinition);
         _tabs.SelectedIndexChanged += OnTabChanged;
         _split.Panel1.Controls.Add(_tabs);
@@ -243,8 +250,9 @@ public sealed partial class MainForm
         detailHeader.Controls.Add(_btnExport);
         detailHeader.Controls.Add(_btnCopy);
 
-        // ── 第二行：备份与就地编辑 ──
-        // 单独一行是因为这一排按钮比上面那排长，塞进标题行会把「详情 / 原始 JSON」挤没。
+        // Second row: backup and in-place editing.
+        // It gets its own row because this strip is wider than the one above; sharing the title row would
+        // squeeze out "detail / raw JSON".
         var editBar = new Panel
         {
             Dock = DockStyle.Top,
@@ -312,7 +320,7 @@ public sealed partial class MainForm
         detailPanel.Controls.Add(detailHeader);
         _split.Panel2.Controls.Add(detailPanel);
 
-        // ───────── 底部状态栏 ─────────
+        // Bottom status bar
         _status.Dock = DockStyle.Bottom;
         _status.SizingGrip = true;
 
@@ -332,7 +340,7 @@ public sealed partial class MainForm
         _status.Items.Add(_lblCounts);
         _status.Items.Add(_progress);
 
-        // ───────── 装配（顺序决定 Dock 优先级：先加 Fill，再加 Top/Bottom）─────────
+        // Assembly (order decides Dock priority: add Fill first, then Top/Bottom)
         Controls.Add(_split);
         Controls.Add(panelTop);
         Controls.Add(_status);
@@ -342,8 +350,10 @@ public sealed partial class MainForm
 
     private void BuildGrids()
     {
-        // 列宽按「左侧面板初始宽度约 820px」设计：固定列合计 ~660，剩下一列用 Fill 吃掉余量。
-        // 次要信息（产出数量、耗时、副本数）不占表格列，放到右侧详情面板里。
+        // Column widths assume the left panel starts around 820px: fixed columns total ~660 and the last one
+        // fills the rest. Secondary info (output count, duration, duplicate count) lives in the detail panel
+        // instead of taking a column. Blueprint and recipe pages get their own tables, and the kind is constant
+        // within each, so that column is dropped - the tab title already says it.
         ConfigureGrid(_gridProduct, new[]
         {
             Col("蓝图名", nameof(SearchRow.BlueprintName), 168),
@@ -351,8 +361,7 @@ public sealed partial class MainForm
             Col("原料清单", nameof(SearchRow.IngredientsText), 190, fill: true),
             Col("工具", nameof(SearchRow.ToolsText), 112),
             Col("地点", nameof(SearchRow.LocationText), 74),
-            Col("来源 Mod", nameof(SearchRow.ModSources), 108),
-            Col("类型", nameof(SearchRow.SourceKindText), 54)
+            Col("来源 Mod", nameof(SearchRow.ModSources), 108)
         }, _gridProduct_SelectionChanged);
 
         ConfigureGrid(_gridIngredient, new[]
@@ -362,8 +371,7 @@ public sealed partial class MainForm
             Col("产物", nameof(SearchRow.ResultText), 168),
             Col("该配方完整原料", nameof(SearchRow.IngredientsText), 190, fill: true),
             Col("地点", nameof(SearchRow.LocationText), 74),
-            Col("来源 Mod", nameof(SearchRow.ModSources), 108),
-            Col("类型", nameof(SearchRow.SourceKindText), 54)
+            Col("来源 Mod", nameof(SearchRow.ModSources), 108)
         }, _gridIngredient_SelectionChanged);
 
         ConfigureGrid(_gridTool, new[]
@@ -377,8 +385,30 @@ public sealed partial class MainForm
             Col("类型", nameof(SearchRow.SourceKindText), 54)
         }, _gridTool_SelectionChanged);
 
-        // 物品定义：一份 auto-mapped JSON 一行。这里不显示配方相关列，
-        // 因为这份数据描述的是「物品本身」，跟怎么做出来无关。
+        // Recipe tables keep the raw recipe key (GAMEPLAY_Broth and friends): players use it to look the dish
+        // up in a localization pack. Only the detail panel carries it - the key is far wider than a column and
+        // in a table would always render as "GAMEPLAY_...".
+        ConfigureGrid(_gridRecipeProduct, new[]
+        {
+            Col("食谱名", nameof(SearchRow.BlueprintName), 140),
+            Col("产物", nameof(SearchRow.ResultText), 175),
+            Col("原料清单", nameof(SearchRow.IngredientsText), 190, fill: true),
+            Col("地点", nameof(SearchRow.LocationText), 60),
+            Col("来源 Mod", nameof(SearchRow.ModSources), 96)
+        }, _gridRecipeProduct_SelectionChanged);
+
+        ConfigureGrid(_gridRecipeIngredient, new[]
+        {
+            Col("食谱名", nameof(SearchRow.BlueprintName), 140),
+            Col("用量", nameof(SearchRow.MatchNote), 72),
+            Col("产物", nameof(SearchRow.ResultText), 175),
+            Col("该食谱完整原料", nameof(SearchRow.IngredientsText), 190, fill: true),
+            Col("地点", nameof(SearchRow.LocationText), 60),
+            Col("来源 Mod", nameof(SearchRow.ModSources), 96)
+        }, _gridRecipeIngredient_SelectionChanged);
+
+        // Item definitions: one auto-mapped JSON per row. No recipe columns here, because this data describes
+        // the item itself, not how it is made.
         ConfigureGrid(_gridDefinition, new[]
         {
             Col("物品 ID", nameof(DefinitionRow.ItemId), 168),
@@ -411,7 +441,7 @@ public sealed partial class MainForm
         grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(245, 246, 248);
         grid.ColumnHeadersDefaultCellStyle.Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold);
         grid.ColumnHeadersDefaultCellStyle.Padding = new Padding(S(4), S(3), S(4), S(3));
-        // 表头不换行：列宽窄时宁可显示省略号，也不要变成两行把表头撑高
+        // Headers never wrap: with narrow columns an ellipsis beats a two-line header that inflates the row
         grid.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.False;
         grid.DefaultCellStyle.Padding = new Padding(S(4), S(2), S(4), S(2));
         grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(250, 250, 252);
@@ -421,9 +451,9 @@ public sealed partial class MainForm
 
         grid.Columns.Clear();
         grid.Columns.AddRange(columns);
-        // 两个事件都要绑，缺一不可：
-        //   SelectionChanged —— 键盘上下键、程序化选中（此时选中项真的变了）
-        //   CellClick        —— 鼠标点击已被选中的行（选中项没变，不会触发 SelectionChanged）
+        // Both events are required:
+        //   SelectionChanged - arrow keys and programmatic selection (the selection really changed)
+        //   CellClick        - mouse click on the already-selected row (selection unchanged, no event)
         grid.SelectionChanged += onSelectionChanged;
         grid.CellClick += (_, e) => { if (e.RowIndex >= 0) ShowDetail(grid); };
         grid.CellDoubleClick += OnGridDoubleClick;
@@ -458,8 +488,8 @@ public sealed partial class MainForm
     };
 
     /// <summary>
-    /// 把结果填进表格。用 BindingList 包装，才能让点击列头排序正常工作。
-    /// 泛型是因为物品定义表绑定的是另一套行类型（<see cref="DefinitionRow"/>）。
+    /// Fills a table. BindingList is required for click-to-sort headers to work.
+    /// Generic because the definition table binds a different row type (<see cref="DefinitionRow"/>).
     /// </summary>
     private static void Bind<T>(DataGridView grid, IEnumerable<T> rows) where T : class
     {

@@ -2,37 +2,37 @@ using System.Collections.ObjectModel;
 
 namespace TLD_ModBlueprintFinder.Models;
 
-/// <summary>原料条的类别。蓝图里的「原料」不止 Gear，还包括粉末、液体和工具。</summary>
+/// <summary>Kind of an ingredient line. Ingredients include powders, liquids and tools, not only gear.</summary>
 public enum IngredientKind
 {
-    /// <summary>普通物品（RequiredGear[].Item）。</summary>
+    /// <summary>Plain gear item (RequiredGear[].Item).</summary>
     Gear,
-    /// <summary>粉末（RequiredPowder[].Powder），例如 POWDER_Flour。</summary>
+    /// <summary>Powder (RequiredPowder[].Powder), e.g. POWDER_Flour.</summary>
     Powder,
-    /// <summary>液体（RequiredLiquid[].Liquid），例如 LIQUID_WaterPotable。</summary>
+    /// <summary>Liquid (RequiredLiquid[].Liquid), e.g. LIQUID_WaterPotable.</summary>
     Liquid,
-    /// <summary>工具（RequiredTool / OptionalTools / AllowedCookingPots）。</summary>
+    /// <summary>Tool (RequiredTool / OptionalTools / AllowedCookingPots).</summary>
     Tool
 }
 
-/// <summary>工具在配方中的角色。</summary>
+/// <summary>Role a tool plays in a recipe.</summary>
 public enum ToolRole
 {
     None = 0,
-    /// <summary>RequiredTool：必须有。</summary>
+    /// <summary>RequiredTool: must be carried.</summary>
     Required,
-    /// <summary>OptionalTools：有其一即可。</summary>
+    /// <summary>OptionalTools: any one of them is enough.</summary>
     Optional,
-    /// <summary>AllowedCookingPots：烹饪容器。</summary>
+    /// <summary>AllowedCookingPots: cooking vessel.</summary>
     CookingPot
 }
 
 /// <summary>
-/// 一条原料引用。对应 modcomponent 蓝图 JSON 里的三种写法：
-///   1. { "Item": "GEAR_X", "Count": 3 }                      —— 按件数
-///   2. { "Item": "GEAR_X", "Quantity": 0.1, "Units": "Kilograms" } —— 按重量/体积
-///   3. "GEAR_X"                                              —— 纯字符串简写
-/// 三者必须统一建模，否则「以某物品为原料」的检索会漏。
+/// One ingredient reference. The JSON has three shapes for the same field:
+///   { "Item": "GEAR_X", "Count": 3 }                             - by item count
+///   { "Item": "GEAR_X", "Quantity": 0.1, "Units": "Kilograms" }  - by weight or volume
+///   "GEAR_X"                                                     - bare string
+/// All three must map to this one model, or "used as an ingredient" searches silently miss entries.
 /// </summary>
 public sealed class Ingredient
 {
@@ -40,18 +40,18 @@ public sealed class Ingredient
     public IngredientKind Kind { get; init; } = IngredientKind.Gear;
     public ToolRole Role { get; init; } = ToolRole.None;
 
-    /// <summary>按件数计（Count 字段）。</summary>
+    /// <summary>Counted in items (Count).</summary>
     public double? Count { get; init; }
 
-    /// <summary>按数值计（Quantity 字段，配合 Units）。</summary>
+    /// <summary>Measured amount (Quantity, read together with Units).</summary>
     public double? Quantity { get; init; }
 
-    /// <summary>Quantity 的单位：Count / Kilograms / Litres。</summary>
+    /// <summary>Unit for Quantity: Count / Kilograms / Litres.</summary>
     public string? Units { get; init; }
 
     public bool IsTool => Kind == IngredientKind.Tool;
 
-    /// <summary>用于表格展示的用量文本。</summary>
+    /// <summary>Amount text for table cells.</summary>
     public string AmountText
     {
         get
@@ -80,7 +80,7 @@ public sealed class Ingredient
         }
     }
 
-    /// <summary>把 "Kilograms" / "Litres" 之类换成紧凑的展示单位。</summary>
+    /// <summary>Compacts "Kilograms" / "Litres" into the short display unit.</summary>
     private static string NormalizeUnit(string? units)
     {
         if (string.IsNullOrWhiteSpace(units)) return "";
@@ -91,7 +91,7 @@ public sealed class Ingredient
         return u;
     }
 
-    /// <summary>数字去掉无意义的 .0，避免表格里出现 "3.000000"。</summary>
+    /// <summary>Drops trailing zeros so tables never show "3.000000".</summary>
     private static string Trim(double v)
     {
         if (Math.Abs(v - Math.Round(v)) < 1e-9) return ((long)Math.Round(v)).ToString();
@@ -101,74 +101,73 @@ public sealed class Ingredient
     public override string ToString() => $"{ItemId} {AmountText}";
 }
 
-/// <summary>蓝图来源：直接定义在 blueprints/ 下，还是包在 recipes/ 的食谱里。</summary>
+/// <summary>Where a record came from: a blueprint under blueprints/, or a recipe under recipes/.</summary>
 public enum BlueprintSourceKind
 {
-    /// <summary>blueprints/*.json —— 一个文件就是一个 Blueprint 对象。</summary>
+    /// <summary>blueprints/*.json - the file is the blueprint object itself.</summary>
     Blueprint,
-    /// <summary>recipes/*.json —— 一个文件是 Recipe 对象，蓝图嵌在 BlueprintData 里。</summary>
+    /// <summary>recipes/*.json - the file is a recipe wrapper, the blueprint sits in BlueprintData.</summary>
     Recipe
 }
 
 /// <summary>
-/// 一条蓝图记录 = modcomponent 里的一份可制作配方。
-/// 字段名与 modcomponent JSON 的映射见 <see cref="Parsing.BlueprintParser"/>。
+/// One craftable recipe inside a modcomponent. JSON field mapping: <see cref="Parsing.BlueprintParser"/>.
 /// </summary>
 public sealed class BlueprintRecord
 {
-    /// <summary>所属 mod（modcomponent 文件名 / 解压目录名）。</summary>
+    /// <summary>Owning mod (modcomponent file name or extracted folder name).</summary>
     public string ModName { get; init; } = string.Empty;
 
-    /// <summary>容器（.modcomponent 文件或目录）的完整路径。</summary>
+    /// <summary>Full path of the container (.modcomponent file or extracted folder).</summary>
     public string ContainerPath { get; init; } = string.Empty;
 
-    /// <summary>容器内条目路径，如 blueprints/AcornShelled.json。</summary>
+    /// <summary>Entry path inside the container, e.g. blueprints/AcornShelled.json.</summary>
     public string EntryPath { get; init; } = string.Empty;
 
     public BlueprintSourceKind SourceKind { get; init; } = BlueprintSourceKind.Blueprint;
 
-    /// <summary>蓝图 ID（JSON 的 Name）。这是蓝图在游戏里的唯一键。</summary>
+    /// <summary>Blueprint ID (JSON "Name"). The blueprint's unique key in game.</summary>
     public string Name { get; init; } = string.Empty;
 
-    /// <summary>食谱的本地化 key（仅 recipes/ 形式有，如 GAMEPLAY_Broth）。</summary>
+    /// <summary>Recipe localization key (recipes/ only), e.g. GAMEPLAY_Broth.</summary>
     public string? RecipeName { get; init; }
 
-    /// <summary>食谱的本地化描述 key。</summary>
+    /// <summary>Recipe description localization key.</summary>
     public string? RecipeDescription { get; init; }
 
-    /// <summary>产物物品 ID（CraftedResult）。这是「作为产物」检索的匹配字段。</summary>
+    /// <summary>Crafted item ID (CraftedResult). What "as a product" searches match on.</summary>
     public string CraftedResult { get; init; } = string.Empty;
 
-    /// <summary>产物数量（CraftedResultCount，缺省按 1 处理）。</summary>
+    /// <summary>Crafted amount (CraftedResultCount, defaults to 1).</summary>
     public double CraftedResultCount { get; init; } = 1;
 
-    /// <summary>制作地点原始值（RequiredCraftingLocation）。</summary>
+    /// <summary>Raw crafting location (RequiredCraftingLocation).</summary>
     public string? RawCraftingLocation { get; init; }
 
-    /// <summary>制作地点归一化后的展示名。</summary>
+    /// <summary>Crafting location after normalization, for display.</summary>
     public string CraftingLocation => CraftingLocations.Normalize(RawCraftingLocation);
 
     public double DurationMinutes { get; init; }
 
-    /// <summary>配方消耗的原料（Gear + Powder + Liquid）。</summary>
+    /// <summary>Consumed ingredients (gear + powder + liquid).</summary>
     public IReadOnlyList<Ingredient> Ingredients { get; init; } = Array.Empty<Ingredient>();
 
-    /// <summary>配方涉及的工具（必需 / 可选 / 锅具）。</summary>
+    /// <summary>Tools referenced by the recipe (required / optional / cooking pot).</summary>
     public IReadOnlyList<Ingredient> Tools { get; init; } = Array.Empty<Ingredient>();
 
-    /// <summary>额外条件：煤油、火药之类不落在 Gear/Powder/Liquid 三组里的需求。</summary>
+    /// <summary>Requirements outside the gear/powder/liquid groups, e.g. kerosene or gunpowder.</summary>
     public IReadOnlyList<string> ExtraRequirements { get; init; } = Array.Empty<string>();
 
-    /// <summary>解析过程中发现的字段问题（缺字段、类型异常）。</summary>
+    /// <summary>Field problems found while parsing (missing field, unexpected type).</summary>
     public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
 
-    /// <summary>原始 JSON 文本，用于详情面板核对。</summary>
+    /// <summary>Raw JSON text, shown in the detail panel for verification.</summary>
     public string RawJson { get; init; } = string.Empty;
 
-    /// <summary>表格里展示的简短名：优先食谱本地化 key，其次蓝图 ID。</summary>
+    /// <summary>Short name for tables: the blueprint ID, falling back to the entry path.</summary>
     public string DisplayName => string.IsNullOrWhiteSpace(Name) ? EntryPath : Name;
 
-    /// <summary>产物的可读文本，如 "GEAR_AcornShelled x10"。</summary>
+    /// <summary>Readable product text, e.g. "GEAR_AcornShelled x10".</summary>
     public string ResultText
     {
         get
@@ -183,8 +182,8 @@ public sealed class BlueprintRecord
 }
 
 /// <summary>
-/// 制作地点的归一化表。真实数据里同时存在 "Workbench" 与 "WorkBench" 两种拼写
-/// （实测 68 次 Workbench / 1 次 WorkBench），不做归一化会让分组统计出错。
+/// Normalization table for crafting locations. Real data contains both "Workbench" and "WorkBench",
+/// so grouping breaks without it.
 /// </summary>
 public static class CraftingLocations
 {
@@ -204,13 +203,13 @@ public static class CraftingLocations
     {
         if (string.IsNullOrWhiteSpace(raw)) return "未声明";
         var key = raw.Trim();
-        // 去掉内部空格再匹配，"Work Bench" 也能命中
+        /// <summary>Drops inner spaces before lookup so "Work Bench" matches too.</summary>
         var compact = key.Replace(" ", "");
         return Map.TryGetValue(compact, out var name) ? name : key;
     }
 }
 
-/// <summary>一次扫描中某个容器的结果摘要，用于界面上说明「为什么没结果」。</summary>
+/// <summary>Per-container summary, used by the UI to explain why a search came back empty.</summary>
 public sealed class ContainerSummary
 {
     public string Name { get; init; } = string.Empty;
@@ -220,18 +219,18 @@ public sealed class ContainerSummary
     public string? FailureReason { get; set; }
     public int BlueprintCount { get; set; }
 
-    /// <summary>这个容器里 auto-mapped/ 的物品定义份数。</summary>
+    /// <summary>Number of auto-mapped item definitions in this container.</summary>
     public int DefinitionCount { get; set; }
 
     public int EntryErrorCount { get; set; }
 }
 
-/// <summary>整体扫描报告。</summary>
+/// <summary>Aggregate result of one scan.</summary>
 public sealed class ScanReport
 {
     public List<BlueprintRecord> Records { get; } = new();
 
-    /// <summary>auto-mapped/ 里的物品定义（物品本身长什么样，不是配方）。</summary>
+    /// <summary>Item definitions from auto-mapped/ (what the item is, not how to make it).</summary>
     public List<ItemDefinition> Definitions { get; } = new();
 
     public List<ContainerSummary> Containers { get; } = new();

@@ -4,36 +4,33 @@ using TLD_ModBlueprintFinder.Models;
 
 namespace TLD_ModBlueprintFinder.Parsing;
 
-/// <summary>扫描选项。</summary>
+/// <summary>Scan options.</summary>
 public sealed class ScanOptions
 {
-    /// <summary>是否向 Mods 的子目录继续找 modcomponent（部分玩家会把 mod 分文件夹放）。</summary>
+    /// <summary>Also look in subfolders (some players sort mods into folders).</summary>
     public bool IncludeSubFolders { get; set; } = true;
 
-    /// <summary>是否扫描「解压目录形式」的 component（Mods/&lt;ModName&gt;/blueprints/*.json）。</summary>
+    /// <summary>Scan extracted-folder mods (Mods/&lt;ModName&gt;/blueprints/*.json).</summary>
     public bool IncludeExtractedFolders { get; set; } = true;
 
     /// <summary>
-    /// 是否扫描 Mods/_ModComponentTemp。
-    /// 默认关闭：ModComponent 加载 .modcomponent 时会在这里解压一份副本，
-    /// 扫了会和 zip 里的蓝图重复计数。
+    /// Scan Mods/_ModComponentTemp. Off by default: ModComponent unpacks a copy of every .modcomponent
+    /// there, so scanning it double-counts the same blueprints.
     /// </summary>
     public bool IncludeModComponentTemp { get; set; }
 
-    /// <summary>单个 JSON 条目的大小上限，防御畸形/炸弹包。</summary>
+    /// <summary>Per-entry size cap, to survive malformed or zip-bomb containers.</summary>
     public long MaxEntryBytes { get; set; } = 16 * 1024 * 1024;
 }
 
-/// <summary>扫描进度回报。</summary>
+/// <summary>Scan progress report.</summary>
 public readonly record struct ScanProgress(string Message, int Done, int Total);
 
 /// <summary>
-/// modcomponent 扫描器 —— 只读。
-///
-/// .modcomponent 的本质是一个 ZIP 容器（与参考实现 ModComponentExtractor 的结论一致：
-/// 它用 SharpZipLib 的 FastZip 把 .modcomponent 解压成目录来编辑，反之压回 zip）。
-/// 本工具不解压到磁盘，而是用 System.IO.Compression.ZipArchive 在内存里枚举条目，
-/// 因此对 Mods 目录 **零写入**。
+/// Read-only modcomponent scanner.
+/// A .modcomponent is a ZIP; entries are enumerated in memory with ZipArchive, so the Mods folder is
+/// never written to. Path resolution lives here too: the input may be a game root, a Mods folder or a
+/// single .modcomponent.
 /// </summary>
 public sealed class ModScanner
 {
@@ -44,8 +41,7 @@ public sealed class ModScanner
     };
 
     /// <summary>
-    /// 扫描用户给定的路径。
-    /// 路径可以是：游戏根目录、Mods 目录、单个 .modcomponent/.zip 文件。
+    /// Scans the given path: a game root, a Mods folder, or a single .modcomponent/.zip file.
     /// </summary>
     public ScanReport Scan(
         string inputPath,
@@ -109,9 +105,7 @@ public sealed class ModScanner
         return report;
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 路径解析：把用户输入的任意合理路径归一成「容器列表」
-    // ────────────────────────────────────────────────────────────────────
+    // Path resolution: normalize any reasonable input into a list of containers
 
     internal sealed record ContainerSpec(string Name, string Path, bool IsFolder);
 
@@ -124,7 +118,7 @@ public sealed class ModScanner
         if (input.Length == 0)
             throw new ArgumentException("请先填写游戏路径（例如 F:\\SteamLibrary\\steamapps\\common\\TheLongDark）。");
 
-        // ① 用户直接给了一个 modcomponent / zip 文件
+        // 1. The user pointed straight at a modcomponent / zip file.
         if (File.Exists(input))
         {
             var ext = Path.GetExtension(input);
@@ -145,12 +139,12 @@ public sealed class ModScanner
 
         var full = Path.GetFullPath(input);
 
-        // ② 目录本身就是 Mods（直接含 modcomponent 文件，或含 blueprints/ 子目录）
+        // 2. The folder is Mods itself (holds modcomponents or blueprints/ directly).
         var containers = CollectContainers(full, options);
         if (containers.Count > 0)
             return new ResolvedInput(full, containers);
 
-        // ③ 用户给的是游戏根目录：往下找 Mods
+        // 3. The user gave the game root: look for Mods underneath.
         var modsSub = Path.Combine(full, "Mods");
         if (Directory.Exists(modsSub))
         {
@@ -171,7 +165,7 @@ public sealed class ModScanner
 
         var search = options.IncludeSubFolders ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
 
-        // .modcomponent / .zip 容器
+        // .modcomponent / .zip containers
         IEnumerable<string> files;
         try
         {
@@ -193,7 +187,7 @@ public sealed class ModScanner
                 !ext.Equals(".zip", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            // 只认严格以 .modcomponent 结尾的，排除 .modcomponent.bak.20261020 这类备份
+            // Accept only real .modcomponent files; skip backups like .modcomponent.bak.20261020
             var fileName = Path.GetFileName(file);
             if (fileName.EndsWith(".bak", StringComparison.OrdinalIgnoreCase)) continue;
 
@@ -202,7 +196,7 @@ public sealed class ModScanner
 
         if (!options.IncludeExtractedFolders) return list;
 
-        // 解压目录形式：<dir>/blueprints/*.json
+        // Extracted folders: <dir>/blueprints/*.json
         foreach (var dir in SafeEnumerateDirectories(modsRoot, search))
         {
             var dirName = Path.GetFileName(dir);
@@ -211,18 +205,18 @@ public sealed class ModScanner
                 continue;
 
             var isTemp = dirName.Equals("_ModComponentTemp", StringComparison.OrdinalIgnoreCase);
-            if (isTemp) continue;   // _ModComponentTemp 自身不是 mod，里面才是
+            if (isTemp) continue;   // _ModComponentTemp is not a mod itself; the mods sit inside it
 
             if (!HasBlueprintFolder(dir)) continue;
 
-            // 若同名的 .modcomponent 已经收集过，跳过解压目录，避免同一 mod 被算两次
+            // Skip the folder when a .modcomponent of the same name was collected, or the mod counts twice
             if (list.Any(c => !c.IsFolder && c.Name.Equals(dirName, StringComparison.OrdinalIgnoreCase)))
                 continue;
 
             list.Add(new ContainerSpec(dirName, dir, true));
         }
 
-        // 单独处理 _ModComponentTemp（默认关闭）
+        // _ModComponentTemp is handled separately and is off by default
         if (options.IncludeModComponentTemp)
         {
             var tempRoot = Path.Combine(modsRoot, "_ModComponentTemp");
@@ -267,9 +261,7 @@ public sealed class ModScanner
         return false;
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 容器读取
-    // ────────────────────────────────────────────────────────────────────
+    // Container readers
 
     private static void ScanZip(
         string zipPath,
@@ -285,7 +277,7 @@ public sealed class ModScanner
         {
             ct.ThrowIfCancellationRequested();
 
-            if (string.IsNullOrEmpty(entry.Name)) continue;   // 目录条目
+            if (string.IsNullOrEmpty(entry.Name)) continue;   // directory entry
 
             var isDefinition = IsDefinitionEntry(entry.FullName);
             var kind = isDefinition ? null : ClassifyEntry(entry.FullName);
@@ -382,7 +374,7 @@ public sealed class ModScanner
                     continue;
                 }
 
-                var bytes = File.ReadAllBytes(file);   // 只读，不写
+                var bytes = File.ReadAllBytes(file);   // read-only
 
                 if (isDefinition)
                 {
@@ -413,7 +405,7 @@ public sealed class ModScanner
         }
     }
 
-    /// <summary>把一份 auto-mapped JSON 收进报告，并同步计数与错误列表。</summary>
+    /// <summary>Collects one auto-mapped JSON into the report, keeping counts and errors in sync.</summary>
     private static void AddDefinition(
         string modName,
         string containerPath,
@@ -438,9 +430,9 @@ public sealed class ModScanner
     }
 
     /// <summary>
-    /// 判断条目是否为 auto-mapped/ 下的物品定义。
-    /// 只看「路径中第一段是 auto-mapped」这一种形态：ModComponent 导出时固定这样放，
-    /// 其他地方出现的同名 JSON 不当作物品定义，避免误读。
+    /// Decides whether an entry is an item definition under auto-mapped/.
+    /// Only "first path segment is auto-mapped" counts: that is where ModComponent exports them, and a
+    /// same-named JSON elsewhere would be misread.
     /// </summary>
     internal static bool IsDefinitionEntry(string entryPath)
     {
@@ -450,7 +442,7 @@ public sealed class ModScanner
         var normalized = entryPath.Replace('\\', '/').TrimStart('/');
         var slash = normalized.IndexOf('/');
 
-        // 必须位于某个子目录里：auto-mapped/xxx.json 或 auto-mapped/collectibles/xxx.json
+        // Must live in a subfolder: auto-mapped/x.json or auto-mapped/collectibles/x.json
         if (slash <= 0) return false;
 
         var first = normalized.Substring(0, slash);
@@ -459,9 +451,9 @@ public sealed class ModScanner
     }
 
     /// <summary>
-    /// 判断一个条目路径是否属于蓝图/食谱。
-    /// 规则：路径中出现名为 blueprints/recipes 的目录段，且以 .json 结尾；
-    /// 位于 auto-mapped / gear-spawns / localizations / bundle 下的内容一律排除。
+    /// Decides whether an entry belongs to blueprints/ or recipes/.
+    /// Rule: a directory segment named blueprints/recipes plus a .json extension; anything under
+    /// auto-mapped, gear-spawns, localizations or bundle is excluded.
     /// </summary>
     internal static BlueprintSourceKind? ClassifyEntry(string entryPath)
     {
@@ -470,7 +462,7 @@ public sealed class ModScanner
 
         var segments = entryPath.Split('/', '\\');
 
-        // 文件本身那一段也要检查排除（例如 auto-mapped/blueprints.json）
+        // The file segment itself must be checked too (e.g. auto-mapped/blueprints.json)
         foreach (var seg in segments)
         {
             foreach (var excluded in ExcludedSegments)
@@ -482,7 +474,7 @@ public sealed class ModScanner
         var isBlueprint = false;
         var isRecipe = false;
 
-        // 只检查目录段（最后一段是文件名）
+        // Directory segments only; the last segment is the file name.
         for (var i = 0; i < segments.Length - 1; i++)
         {
             var seg = segments[i];

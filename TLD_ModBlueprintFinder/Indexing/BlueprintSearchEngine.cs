@@ -4,8 +4,8 @@ using TLD_ModBlueprintFinder.Models;
 namespace TLD_ModBlueprintFinder.Indexing;
 
 /// <summary>
-/// 结果表里的一行。一个 <see cref="SearchRow"/> 可能聚合多份同名蓝图（不同 mod 的副本），
-/// 用 <see cref="Records"/> 保存全部来源，<see cref="Primary"/> 作为展示代表。
+/// One row of a result table. A row may aggregate several copies of the same blueprint from different
+/// mods; <see cref="Records"/> keeps every source, <see cref="Primary"/> is the displayed one.
 /// </summary>
 public sealed class SearchRow : IDetailRow
 {
@@ -23,10 +23,10 @@ public sealed class SearchRow : IDetailRow
 
     public MatchQuality Quality { get; }
 
-    /// <summary>这一行为什么命中，例如「产物」「原料 x10」「可选工具」。</summary>
+    /// <summary>Why this row matched, e.g. "product", "ingredient x10", "optional tool".</summary>
     public string MatchNote { get; }
 
-    // ── 表格列（DataGridView 通过 DataPropertyName 绑定）──
+    // Table columns (bound by DataPropertyName).
 
     public string BlueprintName => Primary.DisplayName;
 
@@ -68,7 +68,7 @@ public sealed class SearchRow : IDetailRow
 
     public string SourceKindText => Primary.SourceKind == BlueprintSourceKind.Recipe ? "食谱" : "蓝图";
 
-    // ── 就地编辑用的定位信息（合并了多份副本时只对代表那一份生效）──
+    // Locating info for in-place editing (only the representative copy when records were merged).
 
     public string ContainerPath => Primary.ContainerPath;
 
@@ -88,7 +88,7 @@ public sealed class SearchRow : IDetailRow
         _ => ""
     };
 
-    // ── 详情面板 ──
+    // Detail panel.
 
     public string BuildDetailText()
     {
@@ -132,7 +132,7 @@ public sealed class SearchRow : IDetailRow
             sb.AppendLine();
         }
 
-        // 原始 JSON 附在最后，方便核对字段
+        // Raw JSON last, for field verification.
         sb.AppendLine("──────── 原始 JSON ────────");
         var raw = Records[0].RawJson;
         sb.AppendLine(raw.Length > 20000 ? raw.Substring(0, 20000) + "\n…（已截断）" : raw);
@@ -175,46 +175,53 @@ public sealed class SearchRow : IDetailRow
     };
 }
 
-/// <summary>一次查询的完整结果。</summary>
+/// <summary>Complete result of one query.</summary>
 public sealed class SearchOutcome
 {
     public string Query { get; init; } = string.Empty;
     public MatchMode Mode { get; init; }
+
+    // Blueprints (blueprints/).
     public List<SearchRow> AsProduct { get; } = new();
     public List<SearchRow> AsIngredient { get; } = new();
+
+    /// <summary>Tools are not split by kind: whether a pot fits or a hammer is needed is one question.</summary>
     public List<SearchRow> AsTool { get; } = new();
 
-    /// <summary>该物品在 modcomponent 里的 JSON 定义（auto-mapped），没有则为空。</summary>
+    // Recipes (recipes/).
+    public List<SearchRow> AsRecipeProduct { get; } = new();
+    public List<SearchRow> AsRecipeIngredient { get; } = new();
+
+    /// <summary>The item's own JSON definition (auto-mapped); empty when it has none.</summary>
     public List<DefinitionRow> Definitions { get; } = new();
 
-    /// <summary>查无匹配时给出的相近 ID 建议。</summary>
+    /// <summary>Similar IDs suggested when nothing matched.</summary>
     public IReadOnlyList<string> Suggestions { get; set; } = Array.Empty<string>();
 
-    /// <summary>给用户看的备注（例如提示只覆盖 Mod 蓝图）。</summary>
+    /// <summary>Notes for the user, e.g. that only mod blueprints are covered.</summary>
     public List<string> Notes { get; } = new();
 
-    /// <summary>三类配方命中数（不含物品定义）。</summary>
-    public int TotalHits => AsProduct.Count + AsIngredient.Count + AsTool.Count;
+    /// <summary>Recipe hits across the five groups (definitions excluded). The groups are disjoint, so they add up.</summary>
+    public int TotalHits =>
+        AsProduct.Count + AsIngredient.Count + AsTool.Count +
+        AsRecipeProduct.Count + AsRecipeIngredient.Count;
 
-    /// <summary>配方一条都没中，物品定义也没找到。</summary>
+    /// <summary>No recipe matched and no item definition was found.</summary>
     public bool IsEmpty => TotalHits == 0 && Definitions.Count == 0;
 }
 
 /// <summary>
-/// 双向检索服务。
-///
-/// ── 判定条件（写死在这里，界面层不做任何业务判断）──
-///   「作为产物」：blueprint.CraftedResult 与查询串匹配
-///   「作为原料」：blueprint.RequiredGear[].Item / RequiredPowder[].Powder / RequiredLiquid[].Liquid 中任一项匹配
-///   「作为工具」：RequiredTool / OptionalTools / AllowedCookingPots 中任一项匹配
-///
-/// 三者刻意分开：工具不是消耗品（不会被扣掉），把它混进「原料」会让玩家误以为要消耗一把锤子。
+/// Two-way search service; every matching rule lives here and the UI makes no business decisions.
+///   product: CraftedResult | ingredient: RequiredGear/Powder/Liquid | tool: RequiredTool/OptionalTools/Pots
+/// Blueprints and recipes get separate product and ingredient groups but share the tool group, and the
+/// five groups never overlap, so TotalHits adds up. Tools stay out of ingredients on purpose: a tool is
+/// not consumed, and listing it there reads as "bring a hammer to burn it".
 /// </summary>
 public sealed class BlueprintSearchEngine
 {
     public BlueprintIndex Index { get; }
 
-    /// <summary>物品定义索引。为 null 表示本次扫描没拿到 auto-mapped 内容。</summary>
+    /// <summary>Item definition index. Null when this scan produced no auto-mapped content.</summary>
     public ItemDefinitionIndex? Definitions { get; }
 
     public BlueprintSearchEngine(BlueprintIndex index, ItemDefinitionIndex? definitions = null)
@@ -234,46 +241,23 @@ public sealed class BlueprintSearchEngine
             return outcome;
         }
 
-        // 只有一条配方都没有、也没有任何物品定义时才算「没加载」。
-        // 有些 mod 只提供 auto-mapped 定义、不带配方，那种情况仍然要能查到物品定义。
+        // Nothing is loaded only when there is no recipe at all and no definition either. Some mods ship
+        // auto-mapped definitions with no recipes, and those must still be searchable.
         if (Index.Count == 0 && (Definitions is null || Definitions.Count == 0))
         {
             outcome.Notes.Add("尚未加载任何蓝图或物品定义，请先选择游戏路径并点击「扫描」。");
             return outcome;
         }
 
-        // ① 作为产物
-        var productGroups = new Dictionary<string, List<BlueprintRecord>>(StringComparer.OrdinalIgnoreCase);
-        var productQuality = new Dictionary<string, MatchQuality>(StringComparer.OrdinalIgnoreCase);
+        // Product groups 1 and 4.
+        CollectProducts(outcome.AsProduct, query, mode, mergeDuplicates, BlueprintSourceKind.Blueprint, "作为产物");
+        CollectProducts(outcome.AsRecipeProduct, query, mode, mergeDuplicates, BlueprintSourceKind.Recipe, "食谱产物");
 
-        foreach (var (bp, quality, _) in Index.SearchAsProduct(query, mode))
-        {
-            var key = mergeDuplicates ? bp.Name : $"{bp.ModName}::{bp.EntryPath}";
-            KeepBest(productGroups, productQuality, key, bp, quality);
-        }
+        // Ingredient groups 2 and 5.
+        CollectIngredients(outcome.AsIngredient, query, mode, mergeDuplicates, BlueprintSourceKind.Blueprint);
+        CollectIngredients(outcome.AsRecipeIngredient, query, mode, mergeDuplicates, BlueprintSourceKind.Recipe);
 
-        outcome.AsProduct.AddRange(BuildRows(productGroups, productQuality, q => "作为产物"));
-
-        // ② 作为原料
-        var ingredientGroups = new Dictionary<string, List<BlueprintRecord>>(StringComparer.OrdinalIgnoreCase);
-        var ingredientQuality = new Dictionary<string, MatchQuality>(StringComparer.OrdinalIgnoreCase);
-        var ingredientNote = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var (bp, quality, ing) in Index.SearchAsIngredient(query, mode))
-        {
-            var key = mergeDuplicates ? bp.Name : $"{bp.ModName}::{bp.EntryPath}";
-            KeepBest(ingredientGroups, ingredientQuality, key, bp, quality);
-
-            var note = $"原料 {ing.AmountText}" + (ing.Kind == IngredientKind.Powder ? "（粉末）" :
-                                                  ing.Kind == IngredientKind.Liquid ? "（液体）" : "");
-            if (!ingredientNote.TryGetValue(key, out var existing) || existing.Length < note.Length)
-                ingredientNote[key] = note;
-        }
-
-        outcome.AsIngredient.AddRange(BuildRows(ingredientGroups, ingredientQuality,
-            key => ingredientNote.TryGetValue(key, out var n) ? n : "作为原料"));
-
-        // ③ 作为工具
+        // Tool group 3 (blueprints and recipes merged: a pot hangs off a recipe, a hammer off a blueprint).
         var toolGroups = new Dictionary<string, List<BlueprintRecord>>(StringComparer.OrdinalIgnoreCase);
         var toolQuality = new Dictionary<string, MatchQuality>(StringComparer.OrdinalIgnoreCase);
         var toolNote = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -296,12 +280,11 @@ public sealed class BlueprintSearchEngine
         outcome.AsTool.AddRange(BuildRows(toolGroups, toolQuality,
             key => toolNote.TryGetValue(key, out var n) ? n : "作为工具"));
 
-        // ④ 物品定义（auto-mapped 里的 JSON）。与配方命中相互独立：
-        //    有些物品只有定义没有配方，反过来也有。
+        // Item definitions (auto-mapped). Independent of recipe hits: definitions without recipes are common.
         if (Definitions is not null)
             outcome.Definitions.AddRange(Definitions.Search(query, mode));
 
-        // ⑤ 无结果时给建议
+        // Suggestions when nothing matched.
         if (outcome.IsEmpty)
         {
             var suggestions = Index.SuggestSimilarIds(query);
@@ -314,8 +297,62 @@ public sealed class BlueprintSearchEngine
     }
 
     /// <summary>
-    /// 同一个 key 命中多次时只保留一条记录，但质量取最好的一次。
-    /// 之所以要「取最好」而不是「先到先得」：倒排表遍历顺序是字典序，先到的可能是 Contains 匹配。
+    /// Collects the "query as product" group. The blueprint tab and the recipe tab run this same code and
+    /// only swap <paramref name="kind"/> and the note text; writing it twice means fixing a dedup key or a
+    /// sort order in one place and missing the other, so the two tab counts disagree.
+    /// </summary>
+    private void CollectProducts(
+        List<SearchRow> target,
+        string query,
+        MatchMode mode,
+        bool mergeDuplicates,
+        BlueprintSourceKind kind,
+        string note)
+    {
+        var groups = new Dictionary<string, List<BlueprintRecord>>(StringComparer.OrdinalIgnoreCase);
+        var quality = new Dictionary<string, MatchQuality>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (bp, matchQuality, _) in Index.SearchAsProduct(query, mode, kind))
+        {
+            var key = mergeDuplicates ? bp.Name : $"{bp.ModName}::{bp.EntryPath}";
+            KeepBest(groups, quality, key, bp, matchQuality);
+        }
+
+        target.AddRange(BuildRows(groups, quality, _ => note));
+    }
+
+    /// <summary>Collects the "query as ingredient" group, with the amount in the note.</summary>
+    private void CollectIngredients(
+        List<SearchRow> target,
+        string query,
+        MatchMode mode,
+        bool mergeDuplicates,
+        BlueprintSourceKind kind)
+    {
+        var groups = new Dictionary<string, List<BlueprintRecord>>(StringComparer.OrdinalIgnoreCase);
+        var quality = new Dictionary<string, MatchQuality>(StringComparer.OrdinalIgnoreCase);
+        var note = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (bp, matchQuality, ing) in Index.SearchAsIngredient(query, mode, kind))
+        {
+            var key = mergeDuplicates ? bp.Name : $"{bp.ModName}::{bp.EntryPath}";
+            KeepBest(groups, quality, key, bp, matchQuality);
+
+            // When one recipe matches at several ingredient positions, keep the note with the most information.
+            var text = $"原料 {ing.AmountText}" + (ing.Kind == IngredientKind.Powder ? "（粉末）" :
+                                                   ing.Kind == IngredientKind.Liquid ? "（液体）" : "");
+            if (!note.TryGetValue(key, out var existing) || existing.Length < text.Length)
+                note[key] = text;
+        }
+
+        target.AddRange(BuildRows(groups, quality,
+            key => note.TryGetValue(key, out var n) ? n : "作为原料"));
+    }
+
+    /// <summary>
+    /// Keeps one record per key when a group was hit several times, but keeps the best match quality.
+    /// "Best" rather than "first" because the inverted tables enumerate in dictionary order, so the first
+    /// hit may well be a Contains match.
     /// </summary>
     private static void KeepBest(
         Dictionary<string, List<BlueprintRecord>> groups,

@@ -3,7 +3,7 @@ using TLD_ModBlueprintFinder.Indexing;
 
 namespace TLD_ModBlueprintFinder.Export;
 
-/// <summary>结果导出。只写用户明确指定的文件，绝不碰 Mods 目录。</summary>
+/// <summary>Result export. Writes only the file the user named; never touches the Mods folder.</summary>
 public static class CsvExporter
 {
     private static readonly string[] Header =
@@ -13,15 +13,17 @@ public static class CsvExporter
         "物品定义JSON"
     };
 
-    /// <summary>把一次查询的三组结果汇总成 CSV 文本。</summary>
+    /// <summary>Flattens the five result groups of one query into CSV text.</summary>
     public static string Build(SearchOutcome outcome)
     {
         var sb = new StringBuilder();
         sb.AppendLine(string.Join(",", Header.Select(Escape)));
 
-        AppendRows(sb, outcome.AsProduct, "作为产物");
-        AppendRows(sb, outcome.AsIngredient, "作为原料");
+        AppendRows(sb, outcome.AsProduct, "作为产物（蓝图）");
+        AppendRows(sb, outcome.AsIngredient, "作为原料（蓝图）");
         AppendRows(sb, outcome.AsTool, "作为工具");
+        AppendRows(sb, outcome.AsRecipeProduct, "作为产物（食谱）");
+        AppendRows(sb, outcome.AsRecipeIngredient, "作为原料（食谱）");
         AppendDefinitions(sb, outcome.Definitions);
 
         return sb.ToString();
@@ -58,7 +60,7 @@ public static class CsvExporter
                 row.DuplicateText,
                 p.ContainerPath,
                 p.EntryPath,
-                string.Empty        // 物品定义 JSON：配方行没有这一列的内容
+                string.Empty        // item definition JSON: recipe rows leave it empty
             };
 
             sb.AppendLine(string.Join(",", values.Select(Escape)));
@@ -66,8 +68,8 @@ public static class CsvExporter
     }
 
     /// <summary>
-    /// 物品定义行。列位沿用配方表，只有 ID / 判定依据 / 组件 / 来源 / 路径 / JSON 有意义，
-    /// 其余留空——这样一份 CSV 里两类数据能同时存在，不必多导一个文件。
+    /// Definition rows reuse the recipe columns. Only ID / basis / components / source / paths / JSON carry
+    /// data and the rest stay empty, so one CSV holds both kinds without a second export.
     /// </summary>
     private static void AppendDefinitions(StringBuilder sb, IEnumerable<DefinitionRow> rows)
     {
@@ -78,18 +80,18 @@ public static class CsvExporter
             {
                 "物品定义",
                 row.ItemId,
-                string.Empty,          // 食谱键
-                string.Empty,          // 产物
-                string.Empty,          // 产出数量
-                row.ConfidenceText,    // 判定依据
-                string.Empty,          // 制作地点
-                string.Empty,          // 耗时
-                row.ComponentsText,    // 组件
-                string.Empty,          // 工具
-                string.Empty,          // 额外条件
+                string.Empty,          // recipe key
+                string.Empty,          // product
+                string.Empty,          // output count
+                row.ConfidenceText,    // match basis
+                string.Empty,          // crafting location
+                string.Empty,          // duration
+                row.ComponentsText,    // components
+                string.Empty,          // tools
+                string.Empty,          // extra requirements
                 row.ModName,
                 "auto-mapped",
-                string.Empty,          // 副本数
+                string.Empty,          // duplicate count
                 d.ContainerPath,
                 d.EntryPath,
                 d.JsonText
@@ -99,7 +101,7 @@ public static class CsvExporter
         }
     }
 
-    /// <summary>写文件（UTF-8 带 BOM，Excel 打开不乱码）。</summary>
+    /// <summary>Writes the file (UTF-8 with BOM so Excel opens it without mojibake).</summary>
     public static void Save(string path, string csv)
     {
         var dir = Path.GetDirectoryName(Path.GetFullPath(path));

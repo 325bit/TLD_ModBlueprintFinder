@@ -7,7 +7,7 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
-        // 无界面模式：方便脚本化查询，也用于验证解析逻辑（见 Cli.cs）
+        // Headless mode: scriptable queries, and a way to exercise the parsers without a GUI (see Cli.cs).
         if (args.Length > 0 && args[0].Equals("--cli", StringComparison.OrdinalIgnoreCase))
             return Cli.Run(args);
 
@@ -18,8 +18,8 @@ internal static class Program
 
         try
         {
-            // 允许双击快捷方式时预置路径与物品 ID：
-            //   TLD_ModBlueprintFinder.exe --path "F:\...\TheLongDark" --item GEAR_AcornShelled
+            // Optional presets so a desktop shortcut can run one query in a double-click:
+            //   TLD_ModBlueprintFinder.exe --path "<game root>" --item GEAR_AcornShelled
             Application.Run(new MainForm(GetArg(args, "path"), GetArg(args, "item")));
         }
         catch (Exception ex)

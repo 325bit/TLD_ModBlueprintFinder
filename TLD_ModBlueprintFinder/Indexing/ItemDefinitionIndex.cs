@@ -2,46 +2,46 @@ using TLD_ModBlueprintFinder.Models;
 
 namespace TLD_ModBlueprintFinder.Indexing;
 
-/// <summary>一行详情。三个结果表 + 物品定义表共用右侧面板，靠这个接口统一渲染。</summary>
+/// <summary>One detail row. Every result table and the definition table share the right-hand panel through it.</summary>
 public interface IDetailRow
 {
     MatchQuality Quality { get; }
 
-    /// <summary>匹配方式的中文说明（精确/前缀/包含）。</summary>
+    /// <summary>Display text for the match quality (exact / prefix / contains).</summary>
     string QualityText { get; }
 
     string BuildDetailText();
 
-    // ── 就地编辑用的定位信息 ──
+    // Locating info for in-place editing.
 
-    /// <summary>所属 modcomponent 的完整路径（备份、写回都以它为准）。</summary>
+    /// <summary>Full path of the owning modcomponent (backups and writes key off it).</summary>
     string ContainerPath { get; }
 
-    /// <summary>容器内的条目路径，如 blueprints/AcornShelled.json。</summary>
+    /// <summary>Entry path inside the container, e.g. blueprints/AcornShelled.json.</summary>
     string EntryPath { get; }
 
-    /// <summary>可编辑的原始 JSON 文本；为空表示这一行没有可写的内容。</summary>
+    /// <summary>Editable raw JSON; empty when this row has nothing to write.</summary>
     string EditableJson { get; }
 
-    /// <summary>状态栏与对话框里用的简短标题，例如「AcornShelled（AHandyToolbox）」。</summary>
+    /// <summary>Short title for the status bar and dialogs, e.g. "AcornShelled (AHandyToolbox)".</summary>
     string EditTitle { get; }
 }
 
-/// <summary>「这份定义对应哪个 ID」的可信度。</summary>
+/// <summary>Confidence in "which ID does this definition belong to".</summary>
 public enum DefinitionConfidence
 {
-    /// <summary>同 mod 的配方文件里引用过这个 ID。</summary>
+    /// <summary>A recipe in the same mod references this ID.</summary>
     SameMod,
 
-    /// <summary>别的 mod（或同 mod 别的容器）的配方引用过这个名字。</summary>
+    /// <summary>A recipe elsewhere (another mod, or another container) references this name.</summary>
     CrossMod,
 
-    /// <summary>没有任何配方引用过，只能靠文件名推断。</summary>
+    /// <summary>No recipe references it; the ID comes from the file name alone.</summary>
     FileNameOnly
 }
 
 /// <summary>
-/// 物品定义表的一行（= auto-mapped 里的一份 JSON）。
+/// One row of the item definition table (= one JSON file under auto-mapped/).
 /// </summary>
 public sealed class DefinitionRow : IDetailRow
 {
@@ -61,17 +61,17 @@ public sealed class DefinitionRow : IDetailRow
 
     public ItemDefinition Definition { get; }
 
-    /// <summary>反推出来的物品 ID；为 null 表示只有文件名可用。</summary>
+    /// <summary>Inferred item ID; null means only the file name is known.</summary>
     public string? ResolvedId { get; }
 
     public DefinitionConfidence Confidence { get; }
 
     public MatchQuality Quality { get; }
 
-    /// <summary>命中了，但真实 ID 与查询只是大小写不同。</summary>
+    /// <summary>Matched, but the real ID differs from the query only by case.</summary>
     public bool CaseMismatch { get; }
 
-    // ── 表格列 ──
+    // Table columns.
 
     public string ItemId => ResolvedId ?? Definition.Stem;
 
@@ -164,18 +164,12 @@ public sealed class DefinitionRow : IDetailRow
 }
 
 /// <summary>
-/// 物品定义索引。
-///
-/// ── 为什么需要「反推 ID」这一步 ──
-/// auto-mapped 里的文件叫 &lt;内部名&gt;.json，文件内容只写组件参数，不写预制体 ID。
-/// 而玩家查的是 GEAR_xxx 这种 ID，中间少了前缀这一环，只能这样补：
-///   1. 先用同 mod 配方里出现过的 ID 去对文件名（最可信）；
-///   2. 再退到全局（跨 mod）的 ID；
-///   3. 都没有就只用文件名，并明确标注「仅文件名」。
-///
-/// 不这么做就会出现张冠李戴：`sugara.json` 是 MoreMeds 的 GEAR_sugara，
-/// 但同一个 mod 的玫瑰果酱配方引用了原版的 GEAR_SugarA，两者只差大小写。
-/// 所以还要记录「小写后同名的 ID 有几个」，多于一个时不做大小写兜底匹配。
+/// Item definition index.
+/// Files under auto-mapped/ are named &lt;internal name&gt;.json and never store the prefab ID, so it is
+/// inferred: same-mod recipe references first, then any mod's recipes, then the file name alone, each
+/// labelled in the UI. Skipping this produces mismatches - sugara.json belongs to MoreMeds' GEAR_sugara,
+/// while a recipe in the same mod references vanilla GEAR_SugarA. So the index tracks how many IDs differ
+/// only by case, and refuses case fallback when there is more than one.
 /// </summary>
 public sealed class ItemDefinitionIndex
 {
@@ -183,16 +177,16 @@ public sealed class ItemDefinitionIndex
 
     private readonly List<Resolved> _entries = new();
 
-    /// <summary>文件名主干（小写）→ 条目下标。</summary>
+    /// <summary>Lower-case file stem -&gt; entry indexes.</summary>
     private readonly Dictionary<string, List<int>> _byStem = new(StringComparer.Ordinal);
 
-    /// <summary>小写 ID → 实际出现过的各种大小写写法。</summary>
+    /// <summary>Lower-case ID -&gt; every casing seen in the corpus.</summary>
     private readonly Dictionary<string, HashSet<string>> _caseVariants = new(StringComparer.Ordinal);
 
     public ItemDefinitionIndex(IEnumerable<ItemDefinition> definitions, IEnumerable<BlueprintRecord> records)
     {
-        // 这里必须用 Ordinal：语料里存在只差大小写的两个 ID（GEAR_sugara / GEAR_SugarA），
-        // 用 OrdinalIgnoreCase 的集合会把它们折叠成一条，正好丢掉需要区分的信息。
+        // Ordinal is required here: the corpus contains GEAR_sugara and GEAR_SugarA, and an OrdinalIgnoreCase
+        // set would collapse them into one entry, losing exactly the distinction that matters.
         var idsByMod = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
         var allIds = new HashSet<string>(StringComparer.Ordinal);
 
@@ -249,7 +243,7 @@ public sealed class ItemDefinitionIndex
 
     public int ModCount => _entries.Select(e => e.Definition.ModName).Distinct(StringComparer.OrdinalIgnoreCase).Count();
 
-    /// <summary>同名（忽略大小写）的物品 ID 有多种大小写写法。</summary>
+    /// <summary>The same item ID appears in more than one casing.</summary>
     private bool HasCaseTwin(string id) =>
         _caseVariants.TryGetValue(id.ToLowerInvariant(), out var set) && set.Count > 1;
 
@@ -268,9 +262,8 @@ public sealed class ItemDefinitionIndex
     }
 
     /// <summary>
-    /// 从候选 ID 里挑出与文件名对应的那个：
-    /// 先看「去掉前缀后大小写完全一致」的（区分 sugara / SugarA），
-    /// 再退到忽略大小写且只有一个候选的情况。
+    /// Picks the candidate ID corresponding to the file name: an exact-case match first (this separates
+    /// sugara from SugarA), then a case-insensitive match only when it is unique.
     /// </summary>
     private static string? PickCandidate(ItemDefinition def, IEnumerable<string>? candidates)
     {
@@ -285,7 +278,7 @@ public sealed class ItemDefinitionIndex
             if (!ItemIds.StripPrefix(id).Equals(def.Stem, StringComparison.OrdinalIgnoreCase)) continue;
 
             if (ItemIds.StripPrefix(id).Equals(def.Stem, StringComparison.Ordinal))
-                return id;   // 大小写都一致，最可信，直接用
+                return id;   // exact case: most reliable, take it
 
             loose = id;
             looseCount++;
@@ -295,8 +288,8 @@ public sealed class ItemDefinitionIndex
     }
 
     /// <summary>
-    /// 按物品 ID 查定义。匹配的是「去掉前缀后的名字」，因此
-    /// GEAR_sugara / LIQUID_xxx / 裸名字 sugara 都能命中同一份文件。
+    /// Looks definitions up by item ID. Matching runs on the prefix-stripped name, so GEAR_sugara,
+    /// LIQUID_xxx and a bare "sugara" all reach the same file.
     /// </summary>
     public IReadOnlyList<DefinitionRow> Search(string rawQuery, MatchMode mode)
     {
@@ -319,14 +312,14 @@ public sealed class ItemDefinitionIndex
 
                 var caseMismatch = false;
 
-                // 精确命中时，真实 ID 必须与查询对得上；名字不同就直接排除
+                // On an exact hit the real ID must agree with the query; a different name is dropped.
                 if (quality == MatchQuality.Exact && entry.Id is not null &&
                     !entry.Id.Equals(query, StringComparison.Ordinal))
                 {
                     if (!entry.Id.Equals(query, StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    // 只是大小写不同：若语料里存在同形异写的另一个 ID，有可能是两件不同物品，必须标注
+                    // Case-only difference: when another ID with the same lower-case form exists, these may be two items.
                     caseMismatch = HasCaseTwin(entry.Id);
                 }
 
@@ -342,7 +335,7 @@ public sealed class ItemDefinitionIndex
             .ToList();
     }
 
-    /// <summary>与 <see cref="BlueprintIndex.Evaluate"/> 同一套三档语义，只是比较对象换成文件名。</summary>
+    /// <summary>Same three-tier semantics as <see cref="BlueprintIndex.Evaluate"/>, applied to file stems.</summary>
     private static MatchQuality EvaluateStem(string stem, string queryStem, MatchMode mode)
     {
         var isExact = stem.Equals(queryStem, StringComparison.OrdinalIgnoreCase);

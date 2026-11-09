@@ -3,27 +3,23 @@ using System.IO.Compression;
 namespace TLD_ModBlueprintFinder.Editing;
 
 /// <summary>
-/// modcomponent 备份。
-///
-/// 备份统一落在 <c>&lt;程序目录&gt;\TLDMBF_modcomponent_backup\</c>，
-/// 文件名为 <c>&lt;mod名&gt;.modcomponent-&lt;yyyyMMdd_HHmmss&gt;</c>：
-/// 以后缀而不是目录来区分时间，是为了让同一个 mod 的历次备份在资源管理器里
-/// 紧挨着排在一起，一眼能看出改了几次。
-///
-/// 只在用户明确点击「备份」或「保存修改」（且勾了自动备份）时才会复制，
-/// 其余路径对 Mods 目录零写入。
+/// modcomponent backups.
+/// Backups land in &lt;program dir&gt;\TLDMBF_modcomponent_backup\ as
+/// &lt;mod name&gt;.modcomponent-&lt;yyyyMMdd_HHmmss&gt;. The stamp is a suffix rather than a folder so
+/// successive backups of one mod sit side by side in Explorer and the number of edits is visible.
+/// Only "Back up" and "Save changes" (with auto-backup on) copy anything; every other path stays
+/// read-only towards the Mods folder.
 /// </summary>
 public static class ModBackup
 {
-    /// <summary>备份目录名，与程序同级的固定名字。</summary>
+    /// <summary>Backup folder name, fixed, next to the executable.</summary>
     public const string FolderName = "TLDMBF_modcomponent_backup";
 
-    /// <summary>备份根目录（程序所在目录下）。</summary>
+    /// <summary>Backup root (inside the program directory).</summary>
     public static string RootDirectory => Path.Combine(AppContext.BaseDirectory, FolderName);
 
     /// <summary>
-    /// 备份一个容器（.modcomponent / .zip 文件，或解压目录形式的 mod）。
-    /// 返回备份出来的路径。
+    /// Backs up one container (.modcomponent/.zip file, or an extracted-folder mod) and returns its path.
     /// </summary>
     public static string Create(string containerPath, DateTime? when = null)
     {
@@ -49,7 +45,8 @@ public static class ModBackup
     }
 
     /// <summary>
-    /// 生成备份路径。同名同秒重复备份时追加 -2、-3，绝不覆盖已有备份。
+    /// Builds the backup path. A second backup in the same second gets -2, -3; an existing backup is never
+    /// overwritten.
     /// </summary>
     private static string BuildTargetPath(string containerPath, bool isFolder, DateTime when)
     {
@@ -61,8 +58,8 @@ public static class ModBackup
 
         var stamp = when.ToString("yyyyMMdd_HHmmss");
 
-        // .modcomponent 源文件直接接时间戳；其它扩展名（少数 mod 用 .zip）保留扩展名，
-        // 免得备份出来分不清是什么格式。
+        // A .modcomponent drops its extension; other extensions (a few mods ship .zip) are kept so the
+        // backup's format stays obvious.
         var extension = isFolder ? "" : Path.GetExtension(containerPath);
         if (extension.Equals(".modcomponent", StringComparison.OrdinalIgnoreCase)) extension = "";
 

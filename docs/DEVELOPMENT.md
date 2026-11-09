@@ -1,82 +1,86 @@
-# 开发文档 · TLD 配方（蓝图）检索工具
+# TLD Mod Blueprint Finder - Developer Documentation
 
-> 玩家向的安装与使用说明见 [../README.md](../README.md)。
-> 本文件写给要改代码或要做二次开发的人：数据格式、字段映射、分层设计、踩过的坑。
+> Language: English only - code comments, `docs/` and CHANGELOG.
+> Player-facing guide: [../README.md](../README.md). Maintainer reading order: this file, then the bug notes.
 
-针对《漫漫长夜》(The Long Dark) + ModComponent 生态的检索工具：**输入一个物品 ID，双向列出「怎么做出它」「它能用来做什么」，贴出它自己的 JSON 定义，并能就地把这两类 JSON 改回 modcomponent。**
+Version 1.5.0 · target game 2.55 · .NET 8 (`net8.0-windows`, WinForms) · no third-party dependencies.
 
-装了四十多个 modcomponent 之后，想知道 `GEAR_ScrapMetal` 到底能做什么，只能一个个 zip 解压翻 JSON。这个工具做掉这件事，并给出四组互不混淆的答案：
+Companion doc: [BUG-001-detail-switch.md](BUG-001-detail-switch.md) - why the shared detail panel used to keep
+showing another tab's row. Comment migration map: §11.
 
-| 结果分组 | 含义 | 匹配字段 |
-| --- | --- | --- |
-| ① 作为产物 | 制作**这个物品**需要哪些蓝图 | `CraftedResult` |
-| ② 作为原料 | **这个物品**被哪些蓝图消耗 | `RequiredGear[].Item` / `RequiredPowder[].Powder` / `RequiredLiquid[].Liquid` |
-| ③ 作为工具 | 哪些蓝图需要 / 可以使用**这个物品**当作工具 | `RequiredTool` / `OptionalTools` / `AllowedCookingPots` |
-| ④ 物品定义 | 这个物品**本身**的参数（重量 / 腐坏 / 堆叠 / 可燃…） | `auto-mapped/<内部名>.json` 的文件名，见 §3 末 |
+The tool searches the `modcomponent` files a modded The Long Dark install carries. Give it one item ID
+and it answers six questions that never mix:
 
-工具与原料**刻意分开**：工具不会被扣掉，混进原料列表会让玩家误以为要消耗一把锤子。
-前三组是「配方」，第四组是「物品定义」——两套数据来自不同目录，互不推导，所以**有配方没定义、有定义没配方都是常态**。
+| Group | Question | Match field | Scope |
+| --- | --- | --- | --- |
+| 1 as product (blueprint) | Which blueprints make **this item** | `CraftedResult` | `blueprints/` |
+| 2 as ingredient (blueprint) | Which blueprints consume **this item** | `RequiredGear[].Item` / `RequiredPowder[].Powder` / `RequiredLiquid[].Liquid` | `blueprints/` |
+| 3 as tool | Which recipes need or accept **this item** as a tool | `RequiredTool` / `OptionalTools` / `AllowedCookingPots` | both |
+| 4 as product (recipe) | Which dish has **this item** as its result | `CraftedResult` | `recipes/` |
+| 5 as ingredient (recipe) | Which dishes use **this item** as food | same as 2 | `recipes/` |
+| 6 item definition | What the item **itself** is (weight, decay, stack, burn) | file name under `auto-mapped/` | `auto-mapped/` |
 
----
+Tools are kept out of the ingredient groups on purpose: a tool is not consumed, and listing it there reads
+as "bring a hammer to burn it". Blueprints and recipes are split because the JSON shape is the same but the
+player's question is not: "what tools can this meat make" is not "what can this meat cook into". Groups 1,
+2, 4 and 5 never overlap, so `TotalHits` can be summed; group 3 stays merged because a cooking pot hangs off
+a recipe while a hammer hangs off a blueprint, and that is one question for the player.
 
-## 1. 数据来源：`.modcomponent` 到底是什么
-
-`.modcomponent` 是一个 **ZIP 容器**。这一点与参考实现 `ModComponentExtractor` 的结论完全一致 —— 它的 `Program.cs`
-用 `ICSharpCode.SharpZipLib.FastZip` 把 `.modcomponent` 解压成目录来编辑，反向把目录压回 zip。
-
-一个容器内部的典型结构：
-
-```
-AHandyToolbox.modcomponent  (ZIP)
-├── BuildInfo.json              ← mod 元信息
-├── blueprints/                 ← 蓝图定义，一个文件一份蓝图
-│   └── AcornShelled.json
-├── recipes/                    ← 烹饪食谱，蓝图嵌在 BlueprintData 里
-│   └── bonebroth.json
-├── auto-mapped/                ← 物品定义：预制体的组件参数（重量 / 腐坏 / 堆叠…）
-├── gear-spawns/                ← 物品生成点（与配方无关）
-├── localizations/              ← 本地化文本
-└── bundle/                     ← 资产包
-```
-
-**收进索引的只有三类**：`blueprints/`、`recipes/`（构成配方倒排表）与 `auto-mapped/`（构成物品定义表）。
-前两者回答「怎么造它」，后者回答「它本身是什么」，两套数据互不推导。其余目录直接跳过。
-
-`auto-mapped/` 只取第一段目录名等于 `auto-mapped`（或 `auto_mapped`）的 `.json`，
-`notes/`、`collectibles/`、`ClothingItems/` 等子目录同样收（命名规则一致，只是分类）。
-
-### 本工具与参考实现的差异（有意为之）
-
-| | ModComponentExtractor | 本工具 |
-| --- | --- | --- |
-| 目的 | 解包 / 重打包 mod | 检索（可选就地改单条 JSON） |
-| ZIP 处理 | SharpZipLib `FastZip` | BCL `System.IO.Compression.ZipArchive` |
-| 是否落盘 | 解压成目录 | **完全不落盘**，内存中直读条目 |
-| 依赖 | SharpZipLib | 零第三方依赖 |
-
-不做落盘是硬性要求：工具不允许在任何情况下往 `Mods` 目录写文件。
-
-### 实测数据规模（2.55 实机）
+## 1. File map
 
 ```
-容器数量      : 46（全部打开成功）
-JSON 条目     : 1184（解析 1184，跳过 0）= 蓝图 423 + 物品定义 761
-蓝图记录      : 423（其中 recipes/ 食谱 16 份）
-物品定义      : 761 份（auto-mapped）
-涉及物品 ID   : 480
-解析耗时      : ~129 ms
-解析警告      : 2（AmmoCraftingTools 里有两份蓝图缺 Name 字段，已用文件名兜底）
+TLD_ModBlueprintFinder/                 repository root
+├── README.md                           player-facing, bilingual
+├── LICENSE                             MIT
+├── publish.bat                         one-click single-file publish -> dist\
+├── dist/                               release artifact (not in git)
+├── docs/                               this file, bug notes, screenshots
+└── TLD_ModBlueprintFinder/             project
+    ├── TLD_ModBlueprintFinder.csproj
+    ├── Properties/PublishProfiles/SelfContainedSingleFile.pubxml
+    ├── Program.cs                      entry point; GUI / CLI split
+    ├── Cli.cs                          headless mode and exit codes
+    ├── Models/BlueprintRecord.cs       BlueprintRecord / Ingredient / ContainerSummary / ScanReport
+    ├── Models/ItemDefinition.cs        ItemDefinition / ItemIds prefix rules
+    ├── Parsing/JsonHelpers.cs          lenient JSON accessors
+    ├── Parsing/BlueprintParser.cs      JSON -> BlueprintRecord, including BlueprintData unwrapping
+    ├── Parsing/ItemDefinitionParser.cs component list + raw text, trailing-comma tolerant
+    ├── Parsing/ModScanner.cs           ZIP / folder walk, path resolution, entry classification
+    ├── Indexing/BlueprintIndex.cs      three inverted tables + kindFilter + similar-ID suggestions
+    ├── Indexing/BlueprintSearchEngine.cs  five groups, dedup, SearchRow
+    ├── Indexing/ItemDefinitionIndex.cs IDetailRow + ID inference from file names
+    ├── Export/CsvExporter.cs           UTF-8 CSV with BOM
+    ├── Editing/ModBackup.cs            whole-container copies into TLDMBF_modcomponent_backup\
+    ├── Editing/ModComponentArchive.cs  entry CRUD (ZIP rewrite core + folder branch)
+    └── Ui/                             MainForm.Ui.cs (controls), MainForm.cs (logic), ContainerEditorForm.cs
 ```
 
----
+Layering rule: the UI makes **no** business decisions. Whether a row matched and why is decided in
+`Indexing`; `Parsing` only turns bytes into objects and never searches. `Editing` knows nothing about
+WinForms, so it can be exercised from a console stub.
 
-## 2. 字段映射：JSON 里到底有哪些字段
+## 2. Data and fields
 
-以下映射不是猜的，是从 46 个真实 modcomponent、423 份蓝图 JSON、761 份物品定义里统计出来的。
+A `.modcomponent` is a **ZIP container**. Entries worth indexing:
 
-### 2.1 两种文件布局
+```
+<mod>.modcomponent  (ZIP)
+├── BuildInfo.json              mod metadata
+├── blueprints/                 one blueprint per file
+├── recipes/                    cooking recipes, blueprint nested in BlueprintData
+├── auto-mapped/                item definitions (prefab component parameters)
+├── gear-spawns/                spawn points - not indexed
+├── localizations/              text - not indexed
+└── bundle/                     assets - not indexed
+```
 
-**A. `blueprints/<名字>.json`** —— 顶层对象就是蓝图：
+`auto-mapped/` is matched on the first path segment only (`auto-mapped` or `auto_mapped`); `notes/`,
+`collectibles/`, `collectibles/cards/` and `ClothingItems/` below it are the same format, only categorized
+differently. A same-named JSON anywhere else is not treated as a definition.
+
+### 2.1 Two entry layouts
+
+**A. `blueprints/<name>.json`** - the root object is the blueprint:
 
 ```json
 {
@@ -90,7 +94,7 @@ JSON 条目     : 1184（解析 1184，跳过 0）= 蓝图 423 + 物品定义 76
 }
 ```
 
-**B. `recipes/<名字>.json`** —— 食谱包装对象，蓝图嵌在 `BlueprintData` 里：
+**B. `recipes/<name>.json`** - a wrapper, the blueprint sits in `BlueprintData`:
 
 ```json
 {
@@ -110,47 +114,42 @@ JSON 条目     : 1184（解析 1184，跳过 0）= 蓝图 423 + 物品定义 76
 }
 ```
 
-**只解析 `blueprints/` 的工具会漏掉全部烹饪食谱** —— 这是这个格式最容易踩的坑。本工具两种都认，
-并在「类型」列标注「蓝图 / 食谱」。
+A parser that only knows layout A loses **every cooking recipe**. `AllowedCookingPots` lives on the wrapper
+but is a real "this item as a tool" reference, so it is folded into the tool list.
 
-### 字段表
+### 2.2 Field map
 
-统计口径：46 个 modcomponent 中 `blueprints/` 目录下的蓝图记录（`recipes/` 走的字段相同）。
+Counts below come from 46 real modcomponents (the `blueprints/` set; `recipes/` uses the same fields).
 
-| JSON 字段 | 含义 | 出现次数 | 备注 |
+| JSON field | Meaning | Occurrences | Notes |
 | --- | --- | --- | --- |
-| `Name` | 蓝图 ID（游戏内唯一键） | 404 | 可能缺失，缺失时用文件名兜底并记警告 |
-| `CraftedResult` | **产物物品 ID** | 404 | 「作为产物」的匹配字段 |
-| `CraftedResultCount` | 产物数量 | 404 | 缺省按 1 |
-| `RequiredGear[].Item` | 原料物品 ID | 830 条 | 「作为原料」的匹配字段 |
-| `RequiredGear[].Count` | 原料件数 | 805 | |
-| `RequiredGear[].Quantity` + `Units` | 按重量计 | 64 | `Units` 实测有 `Kilograms` 与 `Count` 两种 |
-| `RequiredPowder[].Powder` | 粉末 ID | 40 | 配 `QuantityInKilograms` |
-| `RequiredLiquid[].Liquid` | 液体 ID | 52 | 配 `VolumeInLitres` |
-| `RequiredTool` | 必需工具（单个字符串） | 385 | 空串 `""` 表示不需要，**必须过滤**，否则会把空 ID 索引进表 |
-| `OptionalTools[]` | 可选工具 | 339 | |
-| `RequiredCraftingLocation` | 制作地点 | 382 | 实测 `Workbench` / `WorkBench` 两种拼写并存，已归一化 |
-| `KeroseneLitersRequired` | 煤油用量 | 325 | |
-| `GunpowderKGRequired` | 火药用量 | 304 | 旧字段名 `GunpowderRequired` 另有 8 处，两个都读 |
-| `AllowedCookingPots[]` | 可用锅具（食谱专用） | — | 归入「作为工具」 |
+| `Name` | blueprint ID (unique key) | 404 | may be missing; falls back to the file name plus a warning |
+| `CraftedResult` | **product item ID** | 404 | group 1 / 4 match field |
+| `CraftedResultCount` | product amount | 404 | defaults to 1 |
+| `RequiredGear[].Item` | ingredient ID | 830 entries | group 2 / 5 match field |
+| `RequiredGear[].Count` | ingredient count | 805 | |
+| `RequiredGear[].Quantity` + `Units` | ingredient weight | 64 | `Units` is `Kilograms` or `Count` in the wild |
+| `RequiredPowder[].Powder` | powder ID | 40 | paired with `QuantityInKilograms` |
+| `RequiredLiquid[].Liquid` | liquid ID | 52 | paired with `VolumeInLitres` |
+| `RequiredTool` | required tool (single string) | 385 | `""` means none - must be filtered, or an empty ID enters the index |
+| `OptionalTools[]` | alternative tools | 339 | |
+| `RequiredCraftingLocation` | crafting station | 382 | both `Workbench` and `WorkBench` occur; normalized to one |
+| `KeroseneLitersRequired` | kerosene needed | 325 | shown as an extra requirement |
+| `GunpowderKGRequired` | gunpowder needed | 304 | old name `GunpowderRequired` also occurs (8 times); both are read |
+| `AllowedCookingPots[]` | usable pots (recipes only) | - | folded into group 3 |
 
-### 2.3 `RequiredGear` 的三种写法
-
-同一个字段存在三种形态，解析器逐一兼容：
+### 2.3 `RequiredGear` has three shapes
 
 ```jsonc
-"GEAR_Acorn"                                                  // 纯字符串 → 1 件
-{ "Item": "GEAR_Acorn", "Count": 3 }                          // 按件数
-{ "Item": "GEAR_BirdEggRaw", "Quantity": 0.1, "Units": "Kilograms" }  // 按重量
+"GEAR_Acorn"                                                          // bare string -> one item
+{ "Item": "GEAR_Acorn", "Count": 3 }                                  // counted
+{ "Item": "GEAR_BirdEggRaw", "Quantity": 0.1, "Units": "Kilograms" }  // by weight
 ```
 
-第三种实测出现 25 次（集中在 `Bountiful_Foraging`）。**只认 `Count` 的实现会把这些原料的用量读成 1**，
-虽然不影响检索命中，但显示出来的量是错的。
+The third form is frequent enough (25 occurrences, mostly `Bountiful_Foraging`) that a parser reading only
+`Count` reports a wrong amount: the search still hits, but the displayed quantity is a lie.
 
-### 2.4 `auto-mapped/*.json`：物品定义（不是配方）
-
-`auto-mapped/` 里放的是**物品预制体本身的组件参数**——重量、腐坏、可堆叠、可燃、能否烹饪——
-与 `blueprints/` 的「怎么造它」是两套数据。查询物品 ID 时把这份 JSON 一并贴出来，改 mod 时不用再自己解压容器。
+### 2.4 `auto-mapped/*.json` - item definition, not recipe
 
 ```json
 {
@@ -166,471 +165,353 @@ JSON 条目     : 1184（解析 1184，跳过 0）= 蓝图 423 + 物品定义 76
 }
 ```
 
-- 布局：`auto-mapped/<内部名>.json`；另有 `notes/`、`collectibles/`、`collectibles/cards/`、`ClothingItems/`
-  四个子目录，只是分类，命名规则相同。
-- 顶层是「组件名 → 组件参数」的字典，实测 40+ 种组件：
-  `ModGenericComponent`（289）、`ModHarvestableBehaviour`（191）、`ModFoodComponent`（164）、
-  `ModStackableBehaviour`（107）、`ModBurnableBehaviour`（79）……
-- 本机扫描结果：46 个容器共 **761 份**定义。
+- The root is a dictionary of component name -> parameters; over 40 component types occur
+  (`ModGenericComponent` 289, `ModHarvestableBehaviour` 191, `ModFoodComponent` 164,
+  `ModStackableBehaviour` 107, `ModBurnableBehaviour` 79, ...).
+- **No prefab ID is stored.** Only localization keys are, so "which ID does this file belong to" has to be
+  inferred - see §6.
+- The file name is one prefix short of the ID: `sugara.json` describes `GEAR_sugara`, and `GEAR_` /
+  `LIQUID_` / `POWDER_` never appear inside the file.
+- Trailing commas are common (export habit of several mods), so parsing must allow them. A genuine syntax
+  error is not fatal either: the raw text is still shown with a warning, because for a modder a slightly
+  malformed but complete JSON beats an empty panel.
 
-**三个必须处理的现实问题**
+JSON is never mapped to strong types on purpose: component fields vary per mod, and showing the text as
+written is more useful (and can be pasted straight into someone else's mod).
 
-1. **文件里没有预制体 ID**，只有 `DisplayNameLocalizationId` 之类的本地化 key，
-   所以「这个 ID 对应哪份定义」只能靠文件名反推（见 §3 末）。
-2. **文件名比 ID 少一个前缀**：文件叫 `sugara.json`，物品叫 `GEAR_sugara`；
-   `GEAR_` / `LIQUID_` / `POWDER_` 都不写在文件里。
-3. **尾逗号很常见**：Bountiful_Foraging 等 mod 导出的 JSON 带尾逗号，必须开 `AllowTrailingCommas`。
-   真的解析失败也不丢内容——原文照样展示，另附一条提示，因为对二次开发的人来说
-   一份有瑕疵但完整的 JSON 仍然比空白有用。
-
----
-
-## 3. 双向检索的判定条件
-
-匹配前先做归一化：`Trim()`、去掉 `OrdinalIgnoreCase` 的差异（物品 ID 是符号，但玩家手输不该被大小写惩罚）。
-
-| 分组 | 判定 |
-| --- | --- |
-| ① 作为产物 | `blueprint.CraftedResult` 与查询串匹配 |
-| ② 作为原料 | `RequiredGear[].Item`、`RequiredPowder[].Powder`、`RequiredLiquid[].Liquid` 任一项匹配 |
-| ③ 作为工具 | `RequiredTool`、`OptionalTools[]`、`AllowedCookingPots[]` 任一项匹配 |
-| ④ 物品定义 | `auto-mapped/<名字>.json` 的文件名（去掉前缀后）与查询串匹配，见下 |
-
-匹配强度分三级，结果按强度排序并在界面上可视化（斜体 + 变色 + 悬停提示）：
-
-| 模式 | 命中范围 |
-| --- | --- |
-| 自动（默认） | 精确 > 前缀 > 包含，全部列出并分级 |
-| 仅精确匹配 | 只出完全相等 |
-| 仅子串匹配 | 只出「包含」且排除精确（用来捞一批同族 ID） |
-
-**去重**：「合并同名蓝图」勾选后，跨 mod 的同名蓝图（实测 423 条记录里有 42 条重名，例如 `Bountiful_Foraging` 与
-`DZ_Bountiful_Foraging` 是同一 mod 的两个版本）合并成一行，「来源 Mod」列显示全部来源，详情面板逐份列出。
-取消勾选则一行一份，便于排查 mod 冲突。
-
-### ④ 物品定义怎么定 ID
-
-文件名只有内部名，没有前缀，所以按可信度分三档反推宿主 ID，界面上「判定依据」列会明说用的是哪一档：
-
-| 判定依据 | 含义 |
-| --- | --- |
-| 同 mod 配方引用 | 本容器的 `blueprints/`/`recipes/` 里出现过「前缀 + 文件名」，直接采用 |
-| 其他 mod 引用 | 本容器没引用，但别处配方引用过同名 ID（物品与配方经常不在同一个 mod 里） |
-| 仅文件名 | 谁都没引用过，只按名字展示，前缀未知 |
-
-三档都没有时 `ItemId` 显示裸文件名，而不是替用户猜一个 `GEAR_` 上去——猜错比不猜更糟。
-
-**大小写陷阱**：语料里同时存在 `GEAR_sugara`（MoreMeds 的物品）和 `GEAR_SugarA`（原版糖，被玫瑰果酱配方引用），
-去掉前缀后文件名都是 `sugara`。所以：
-
-- 反推时优先「大小写完全一致」的候选（`sugara` → `GEAR_sugara`）；
-- 查询时若宿主 ID 与输入只差大小写、且语料里确实有同形异写的另一个 ID，
-  该行标注「大小写不同」并在详情里点名提醒，避免把两件物品认成一件。
-
----
-
-## 4. 目录结构
+## 3. Pipeline: from a path to a rendered row
 
 ```
-TLD_ModBlueprintFinder/                ← 仓库根目录
-├── README.md                          面向玩家的说明（安装 / 使用 / FAQ）
-├── LICENSE
-├── TLD_ModBlueprintFinder.sln
-├── publish.bat                        一键发布单文件自包含 exe → dist\
-├── dist/                              发布产物（不入库）：TLD_ModBlueprintFinder.exe
-├── docs/                              ← 本文件所在目录
-│   ├── DEVELOPMENT.md                 本文件：数据格式、字段映射、分层设计
-│   ├── BUG-001-detail-switch.md       缺陷 001：详情面板切换失效
-│   └── img/                           界面与复现截图
-└── TLD_ModBlueprintFinder/            源码工程
-    ├── TLD_ModBlueprintFinder.csproj
-    ├── Properties/PublishProfiles/
-    │   └── SelfContainedSingleFile.pubxml   单文件 + 自包含发布配置
-    ├── Program.cs                     入口（GUI / CLI 分流）
-    ├── Cli.cs                         无界面模式
-    ├── Models/
-    │   ├── BlueprintRecord.cs         BlueprintRecord / Ingredient / ContainerSummary / ScanReport
-    │   └── ItemDefinition.cs          ItemDefinition（auto-mapped 物品定义）/ ItemIds 前缀规则
-    ├── Parsing/
-    │   ├── JsonHelpers.cs             宽容 JSON 取值（多字段名、字符串数字、单值/数组）
-    │   ├── BlueprintParser.cs         蓝图映射：字段 → 模型，含 BlueprintData 解包
-    │   ├── ItemDefinitionParser.cs    物品定义：组件清单 + 原文，尾逗号容错
-    │   └── ModScanner.cs              ZIP / 目录遍历、路径解析、条目分类
-    ├── Indexing/
-    │   ├── BlueprintIndex.cs          三张倒排表 + 匹配强度 + 相近 ID 建议
-    │   ├── BlueprintSearchEngine.cs   双向检索、聚合去重、SearchRow
-    │   └── ItemDefinitionIndex.cs     IDetailRow 接口 + 定义按文件名反推 ID
-    ├── Export/
-    │   └── CsvExporter.cs             带 BOM 的 UTF-8 CSV
-    ├── Editing/
-    │   ├── ModBackup.cs               备份：整包复制到 TLDMBF_modcomponent_backup\
-    │   └── ModComponentArchive.cs     容器内条目的增删改查（ZIP 重写内核 + 目录型分支）
-    └── Ui/
-        ├── MainForm.Ui.cs             控件与列定义（code-only，无 .resx）
-        ├── MainForm.cs                事件、扫描、检索、设置持久化
-        └── ContainerEditorForm.cs     容器编辑器窗口（增删改查的界面）
+MainForm.ScanAsync
+  └─ ModScanner.Scan            path -> ContainerSpec[] -> per-container parse
+       ├─ ResolveInput          game root / Mods / single file -> containers
+       ├─ ScanZip | ScanFolder  enumerate entries, size guard, decode
+       ├─ BlueprintParser.ParseMany     -> BlueprintRecord[]
+       └─ ItemDefinitionParser.Parse    -> ItemDefinition[]
+  └─ BlueprintIndex + ItemDefinitionIndex     inverted tables built once per scan
+  └─ BlueprintSearchEngine.Search             five groups + definitions
+  └─ MainForm.ApplyReport                     bind rows, tabs, status, detail
 ```
 
-分层原则：**界面层不做任何业务判断**，是否命中、为什么命中全部由 `Indexing` 决定；
-`Parsing` 只负责把文件变成对象，不碰检索。
+Nothing is written during this chain. The indexes are rebuilt from scratch after a write, because they hold
+parsed ingredients and products, not text - swapping the text alone would show "saved but nothing changed".
 
----
+## 4. Contact points - no game injection
 
-## 5. 编译与运行
+This tool loads no assemblies, patches nothing and never runs inside the game. Its only contact with the
+game folder is the file system:
 
-### 环境要求
+| Direction | Path | When |
+| --- | --- | --- |
+| read | `<path>\Mods\**\*.modcomponent`, `*.zip`, extracted mod folders | scan, and every read in the container editor |
+| write | `<program dir>\TLD_ModBlueprintFinder_settings.json` | after a scan / on close; failures are swallowed |
+| write | `<program dir>\TLDMBF_modcomponent_backup\<mod>.modcomponent-<stamp>` | "Back up", or "Save changes" with auto-backup on |
+| write | the `.modcomponent` the user edited | only on an explicit "Save changes" / editor action |
 
-- Windows 10/11
-- .NET SDK 8.0 或更高（目标框架 `net8.0-windows`，WinForms）
-- 无任何 NuGet 依赖
+`AppContext.BaseDirectory` is used instead of `Directory.GetCurrentDirectory()`: the latter is rewritten by
+a shortcut's "Start in" and by the shell, which would scatter the settings file. BaseDirectory also resolves
+to the exe folder under single-file publish.
 
-### 编译
+If the exe sits in the game root, the settings file and the backup folder land in the game folder too - the
+README tells players to keep the exe elsewhere.
 
-仓库根目录与工程目录同名（`TLD_ModBlueprintFinder/` 下再套一层 `TLD_ModBlueprintFinder/`），
-命令行编译要进到**里层**那个工程目录：
+## 5. Search model
+
+Normalization before matching: `Trim()` plus `OrdinalIgnoreCase`. Item IDs are case-sensitive symbols, but a
+hand-typed query must not be punished for casing. Item definition lookup is stricter (§6).
+
+| Group | Filter |
+| --- | --- |
+| 1 as product (blueprint) | `SourceKind == Blueprint` and `CraftedResult` matches |
+| 2 as ingredient (blueprint) | same kind, and any of the three ingredient groups matches |
+| 3 as tool | any of `RequiredTool` / `OptionalTools[]` / `AllowedCookingPots[]` matches (both kinds) |
+| 4 as product (recipe) | `SourceKind == Recipe` and `CraftedResult` matches |
+| 5 as ingredient (recipe) | same kind, and any ingredient group matches |
+| 6 item definition | file stem matches after prefix stripping |
+
+Filtering happens in `BlueprintIndex.SearchAsProduct` / `SearchAsIngredient` through `kindFilter`;
+`BlueprintSearchEngine` calls `CollectProducts` / `CollectIngredients` twice (Blueprint once, Recipe once).
+The dedup key and the sort order therefore exist once. Writing them twice per tab is how "tab says 3, table
+shows 4 rows" happens.
+
+Match tiers, visualized as italics plus color plus tooltip:
+
+| Mode | Range |
+| --- | --- |
+| Auto (default) | exact > prefix > contains, everything listed and graded |
+| Exact only | identical IDs only |
+| Fuzzy | contains only, exact excluded - used to sweep a family of IDs |
+
+**Dedup**: with "merge duplicate names" on, the same blueprint shipped by several mods collapses into one row
+(42 of the 423 records share a name; `Bountiful_Foraging` and `DZ_Bountiful_Foraging` are two versions of one
+mod). The "mod" column lists every source and the detail panel shows each copy. Turn it off to inspect mod
+conflicts, one row per copy.
+
+**Suggestions**: when nothing matches, candidate IDs are scored by bidirectional containment on the
+prefix-stripped name plus Levenshtein distance, so `Acorn` still finds `GEAR_Acorn`.
+
+## 6. Item definition identity
+
+The file name carries no prefix, so the host ID is inferred in three tiers, and the "basis" column says
+which tier was used:
+
+| Basis | Meaning |
+| --- | --- |
+| same-mod recipe reference | this container's `blueprints/` or `recipes/` contains prefix + file name; taken as-is |
+| other mod reference | this container does not reference it, but some recipe elsewhere does (items and recipes often ship in different mods) |
+| file name only | nothing references it; shown by name, prefix unknown |
+
+When all three tiers fail, `ItemId` shows the bare file name instead of guessing a `GEAR_` prefix - a wrong
+guess is worse than no guess.
+
+**Case trap**: the corpus contains `GEAR_sugara` (a MoreMeds item) and `GEAR_SugarA` (vanilla sugar,
+referenced by a rosehip jam recipe). Stripped of the prefix both are `sugara`. Therefore:
+
+- the inference prefers an exact-case candidate (`sugara` -> `GEAR_sugara`);
+- a query that differs from the host ID only by case is marked "different case" when another ID with the
+  same lower-case form exists, and the detail panel names the two, so the two items are not merged silently.
+
+## 7. Constraint system: writing back
+
+### 7.1 Backups
+
+```
+<program dir>\TLDMBF_modcomponent_backup\<mod>.modcomponent-<yyyyMMdd_HHmmss>
+```
+
+- A stamp suffix rather than a folder per run: successive backups of one mod sit next to each other in
+  Explorer and the number of edits is visible at a glance.
+- A second backup in the same second gets `-2`, `-3`; an existing backup is never overwritten.
+- An extracted-folder mod is backed up as a directory tree, same naming rule.
+- Sources that are not `.modcomponent` (a few mods ship `.zip`) keep their extension, so the format stays
+  obvious.
+- A backup is a byte copy; restoring means renaming it back to `xxx.modcomponent` and dropping it into `Mods`.
+
+### 7.2 Why the whole archive is rewritten
+
+A ZIP cannot replace one entry in place, and `ZipArchiveMode.Update` reads the whole archive into memory and
+writes it back anyway. So a write is three steps:
+
+```
+read original -> copy entry by entry into <name>.<guid>.tmp (target swapped / dropped / renamed)
+              -> File.Move over the original
+```
+
+- The original is complete at every moment. A failure leaves a temp file, never a container that is half
+  written and unloadable.
+- Directory entries (`auto-mapped/` and friends, zero length, trailing `/`) must be copied verbatim, or some
+  unpackers lose the empty folders.
+- Verified: entry count is unchanged after a rewrite, only the target entry's hash differs, and every other
+  entry compares equal byte for byte.
+- Cost: the whole archive is recompressed. Tens of MB take a second or two, and the UI is blocked meanwhile
+  (acceptable for a single-file desktop tool).
+
+### 7.3 Encoding, BOM and directory entries
+
+Text is written as UTF-8; a BOM is preserved when the original entry had one and omitted otherwise. Editing
+text should not silently change the author's encoding habit.
+
+ZIP does not require directory entries, but many unpackers (including ModComponent's own extraction) rely on
+them to restore structure. Writing `blueprints/sub/deep/x.json` therefore also writes the missing
+`blueprints/sub/` and `blueprints/sub/deep/` entries - only the missing ones, never touching existing ones.
+
+Binary entries are detected by a NUL byte in the content. They are listed (behind the "json only" filter) and
+shown read-only. Forcing a bundle, font or texture through a text editor yields mojibake and corrupts it on
+write.
+
+### 7.4 Three gates against losing unsaved edits
+
+`TryLeaveCurrent()` runs before switching entries, switching containers and closing the window. "Cancel"
+must abort the caller: the entry list restores its selection and the combo box restores
+`_lastContainerIndex`. A failed save (validation refused, or the write threw) also returns false - losing
+user edits because saving failed is not acceptable.
+
+Filtering never loses content either: when the current entry is filtered out and there are no unsaved
+changes, the list jumps to the first entry so filtering doubles as locating; with unsaved changes the
+selection is cleared but the editor keeps its text, and clearing the filter finds it again.
+
+The main window instead freezes the left table while one row is being edited (`_tabs.Enabled = false`,
+`ShowDetail()` returns early). A "save before switching?" state machine would be an order of magnitude more
+complex and users can still click wrong; making the switch impossible is far more predictable.
+
+## 8. Settings
+
+`TLD_ModBlueprintFinder_settings.json`, next to the exe.
+
+| Field | Default | Effect |
+| --- | --- | --- |
+| `LastPath` | null | last scanned path; scanned automatically on the next start |
+| `MergeDuplicates` | `true` | merge same-named blueprints across mods |
+| `IncludeSubFolders` | `true` | also look for containers in subfolders of `Mods` |
+| `MatchModeIndex` | `0` | combo-box index: 0 auto, 1 exact, 2 fuzzy |
+| `AutoBackup` | `true` | back up before every write |
+
+A failed save is swallowed on purpose: a tool that forgets the path is less annoying than a modal dialog on
+every launch out of a read-only folder.
+
+## 9. Diagnostics: CLI and exit codes
+
+```bat
+TLD_ModBlueprintFinder.exe --cli --path "<game root | Mods | one .modcomponent>" --item GEAR_Hammer
+```
+
+| Argument | Meaning |
+| --- | --- |
+| `--path <path>` | game root, `Mods` folder, or a single modcomponent |
+| `--item <id>` | item to look up |
+| `--mode auto\|exact\|fuzzy` | match mode |
+| `--no-merge` | do not merge same-named blueprints |
+| `--no-subfolders` | do not recurse into subfolders |
+| `--no-folders` | skip extracted-folder mods |
+| `--temp` | also scan `_ModComponentTemp` |
+| `--scan-only` | scan and print statistics only |
+| `--csv <path>` | export the result as CSV |
+
+Exit codes: `0` results found, `1` no match, `2` bad arguments, `3` scan failure, `4` nothing parsed.
+
+`_ModComponentTemp` is skipped by default: it holds the copies ModComponent unpacked, so scanning it
+double-counts. Enable it with `--temp` or `ScanOptions.IncludeModComponentTemp`.
+
+The console code page can be GBK, and a WinExe has no console handle at all, which makes
+`Console.OutputEncoding` throw; `Cli` falls back to a UTF-8 writer so redirected output stays readable.
+
+## 10. Design constraints
+
+| # | Constraint | If violated | See |
+| --- | --- | --- | --- |
+| 1 | One read path per group; UI never re-filters | tab count and table row count diverge | §5 |
+| 2 | Tools are never in an ingredient group | players think a hammer is consumed | README features |
+| 3 | Blueprints and recipes keep separate product/ingredient groups | the same recipe appears twice and `TotalHits` double-counts | §5 |
+| 4 | `RequiredTool == ""` is filtered before indexing | an empty ID enters the inverted table and matches every fuzzy query | §2.2 |
+| 5 | `Ordinal` for definition stems, `OrdinalIgnoreCase` for queries | `GEAR_sugara` and `GEAR_SugarA` collapse into one item | §6 |
+| 6 | Writes rewrite the whole archive, never patch in place | a crash mid-write leaves an unloadable container | §7.2 |
+| 7 | Temp file is created next to the original and moved over it | a move across volumes is a copy, and the archive is briefly missing | §7.2 |
+| 8 | The write only commits after the target entry was actually found | editing the wrong archive silently rewrites it unchanged | §7.2 |
+| 9 | Existing BOM is preserved on write | the author's encoding habit changes under them | §7.3 |
+| 10 | Missing parent directory entries are added on create | unpackers lose empty folders and the mod structure looks broken | §7.3 |
+| 11 | Entries containing NUL are read-only | a texture is saved back as text and the bundle is corrupted | §7.3 |
+| 12 | The index is rebuilt after every write | the UI shows "saved" while results stay stale | §3 |
+| 13 | The left table is frozen while one row is edited | switching rows discards the unsaved buffer | §7.4 |
+| 14 | Settings use `AppContext.BaseDirectory` | config files scatter into the shortcut's working directory | §4 |
+| 15 | Parse failures degrade to a warning, never abort the scan | one malformed mod hides every other mod's blueprints | §2.4 |
+
+## 11. Comment migration map
+
+Translating the code comments into English also moved every measured number and rationale into this file.
+Nothing was dropped; the source keeps a conclusion plus a pointer.
+
+| Old location | Old content | Now at |
+| --- | --- | --- |
+| `BlueprintParser.cs` type header | two entry layouts, per-field occurrence counts, old vs new gunpowder field | §2.1, §2.2 |
+| `BlueprintParser.cs` `ParseGearRequirements` | three `RequiredGear` shapes and the 25 weighted occurrences | §2.3 |
+| `ItemDefinitionParser.cs` type header | component counts, no-prefab-ID problem, trailing commas | §2.4 |
+| `ModScanner.cs` type header | "a .modcomponent is a ZIP", reference to the extractor implementation | §2, §1 |
+| `ItemDefinitionIndex.cs` type header | inference tiers and the `sugara` / `SugarA` story | §6 |
+| `ModComponentArchive.cs` type header | why the archive is rewritten instead of patched | §7.2 |
+| `ModComponentArchive.cs` `EnsureParentFolders` | why directory entries are restored | §7.3 |
+| `ContainerEditorForm.cs` `TryLeaveCurrent` | the three gates and what cancel must do | §7.4 |
+| `MainForm.cs` `OnEditClick` | why the table is frozen instead of a save prompt | §7.4 |
+| `MainForm.cs` settings block | `BaseDirectory` vs `CurrentDirectory` | §4 |
+| `BlueprintIndex.cs` type header | why inverted tables exist at this data size | §5 |
+| `BlueprintSearchEngine.cs` type header | why the tool group is not split by kind | §5, intro |
+
+## 12. Maintenance conventions
+
+Every change has a fixed set of places to update. Missing one is how a repo starts lying to itself.
+
+| Changed | Also update |
+| --- | --- |
+| A search rule or a match field | §5 here + the group table in the README (both language blocks) |
+| A setting field, default or range | §8 here + the README table (both language blocks) |
+| A write path, gate or order | §7 here + §10 row |
+| Files added, removed or re-roled | §1 file map |
+| Anything removed from a comment | §11 migration map, one row per move |
+| Player-visible behaviour | README feature bullets (both blocks) |
+| Version number | `csproj` `<Version>` -> README badge -> header of this file, all three equal |
+
+Language split: comments and everything under `docs/` are English; only `README.md` carries Chinese.
+
+## 13. Build and deploy
+
+Requires Windows 10/11 and the .NET 8 SDK. No NuGet packages.
 
 ```bat
 cd TLD_ModBlueprintFinder\TLD_ModBlueprintFinder
 dotnet build -c Release
 ```
 
-或在 Visual Studio 2022 中打开仓库根目录的 `TLD_ModBlueprintFinder.sln` 后 F5。
+The repository root and the project folder share a name, so the command must run from the inner folder; from
+Visual Studio, open `TLD_ModBlueprintFinder.sln` at the repository root.
 
-### 运行
-
-```bat
-dotnet run --project TLD_ModBlueprintFinder
-```
-
-或直接双击 `TLD_ModBlueprintFinder\bin\Debug\net8.0-windows\TLD_ModBlueprintFinder.exe`。
-
-> ⚠️ **`bin\` 里的 exe 不能单独拷走。** 它是框架依赖的中间产物，必须和同目录的
-> `TLD_ModBlueprintFinder.dll`、`.deps.json`、`.runtimeconfig.json` 待在一起，
-> 只把 exe 复制到别处会起不来（现象：双击没反应或提示缺少 .NET / 找不到 dll）。
-> 要分发的独立 exe 走下面的「发布」，产物在仓库根目录 `dist\`。
-
-### 发布：单文件 + 自包含（分发用这个）
+**`bin\` output is not distributable.** It is framework-dependent and needs
+`TLD_ModBlueprintFinder.dll`, `.deps.json` and `.runtimeconfig.json` beside it. Copying the exe alone gives a
+silent no-op or a missing-.NET error. Shipping goes through the publish profile:
 
 ```bat
 publish.bat
+:: equivalent: dotnet publish TLD_ModBlueprintFinder -p:PublishProfile=SelfContainedSingleFile
 ```
 
-等价于：
-
-```bat
-dotnet publish TLD_ModBlueprintFinder -p:PublishProfile=SelfContainedSingleFile
-```
-
-配置在 `TLD_ModBlueprintFinder\Properties\PublishProfiles\SelfContainedSingleFile.pubxml`，
-Visual Studio 的「发布」向导里也能直接选到。产物：`dist\TLD_ModBlueprintFinder.exe`，
-**一个文件，约 63 MB**，目标机器不需要装 .NET，双击即跑。
-
-| 设置 | 值 | 原因 |
+| Setting | Value | Why |
 | --- | --- | --- |
-| `RuntimeIdentifier` | `win-x64` | 单文件必须先定 RID；x86/ARM 需要各发一份 |
-| `SelfContained` | `true` | 把 .NET 运行时打进 exe —— 这是「拷到哪都能双击」的关键 |
-| `PublishSingleFile` | `true` | 托管 dll 与运行时合并进同一个 exe |
-| `IncludeNativeLibrariesForSelfExtract` | `true` | 原生库也塞进包里，首次运行解压到 `%TEMP%\.net\`，否则会漏几个 dll 在旁边 |
-| `EnableCompressionInSingleFile` | `true` | 100 MB → 63 MB，代价是启动多约 0.8 s（实测总启动 1.1 s） |
-| `PublishTrimmed` | `false` | WinForms 不支持裁剪，开了会在运行期炸反射 |
-| `DebugType` | `none` | 不生成 pdb，保证 `dist\` 只有一个文件 |
+| `RuntimeIdentifier` | `win-x64` | single-file needs a RID; x86/ARM need their own build |
+| `SelfContained` | `true` | the runtime is packed in - this is what makes "double-click anywhere" work |
+| `PublishSingleFile` | `true` | managed dlls and runtime merged into one exe |
+| `IncludeNativeLibrariesForSelfExtract` | `true` | native libraries packed too, extracted to `%TEMP%\.net\` on first run |
+| `EnableCompressionInSingleFile` | `true` | ~100 MB -> ~65 MB, at the cost of about a second of startup |
+| `PublishTrimmed` | `false` | WinForms does not support trimming; reflection breaks at runtime |
+| `DebugType` | `none` | no pdb, so `dist\` holds exactly one file |
 
-实测：把 `dist\` 里那个 exe 单独复制到带空格与中文的空目录，`--cli --scan-only` 正常输出，
-GUI 正常启动并在自己旁边生成 `TLD_ModBlueprintFinder_settings.json`。
+Artifact: `dist\TLD_ModBlueprintFinder.exe`. Verified by copying that single file into an empty directory whose
+path contains spaces and Chinese characters: `--cli --scan-only` prints normally, the GUI starts, and it writes
+its settings file next to itself.
 
-**为什么 `dotnet build` 出来的不是单文件**：`PublishSingleFile` 只在 publish 阶段生效，
-`build` 永远输出一堆文件。所以每次都走 `publish.bat`，别从 `bin\` 里拿 exe 去分发。
+`PublishSingleFile` only applies to `publish`; `build` always emits a folder of files. Do not ship from `bin\`.
 
----
+## 14. Verification status
 
-## 6. 使用步骤
+What has actually been checked, and how far:
 
-1. **路径**：填游戏根目录（含 `Mods` 文件夹），或直接指向 `Mods` 目录，甚至单个 `.modcomponent`。
-   不想手打就点 **自动定位** —— 它会读 Steam 注册表 + `libraryfolders.vdf`，扫出机器上所有安装，
-   按「Mods 目录最近更新时间」排序，选最可能在用的那个并提示共有几份。
-2. **扫描 Mods**：解析全部容器。完成后右侧显示扫描摘要（每个 mod 贡献多少条蓝图、哪些容器打不开、
-   哪些蓝图字段有问题）。路径上次用过会自动记住并直接扫。
-3. **输入物品 ID**，回车或点 **检索**。不知道全名就只输一部分，切到「自动」模式即可。
-4. 结果分四个 Tab（产物 / 原料 / 工具 / 物品定义）。点任意一行，右侧显示完整原料清单、工具、
-   额外条件（煤油/火药/照明/技能等级）和**原始 JSON**；物品定义页签显示的是物品自身的 JSON。
-5. **导出 CSV**（四组结果一次导出，UTF-8 带 BOM，Excel 直接开）或 **复制**详情到剪贴板。
-   物品定义行沿用同一套列，末尾多一列 `物品定义JSON`（配方行该列为空）。
-6. **备份 / 就地改 JSON**：详情栏第二排按钮，详见 §10。
-7. **容器编辑器**：同一个按钮区里的「容器编辑器…」，对当前 modcomponent 里的文件增删改查，详见 §11。
-
-### 命令行模式
-
-```bat
-TLD_ModBlueprintFinder.exe --cli --path "F:\SteamLibrary\steamapps\common\TheLongDark" --item GEAR_Hammer
-```
-
-| 参数 | 说明 |
+| Area | Status |
 | --- | --- |
-| `--path <路径>` | 游戏根目录 / Mods 目录 / 单个 modcomponent |
-| `--item <物品ID>` | 要查询的物品 |
-| `--mode auto\|exact\|fuzzy` | 匹配模式 |
-| `--no-merge` | 不合并同名蓝图 |
-| `--no-subfolders` | 不递归子目录 |
-| `--no-folders` | 跳过解压目录形式的 mod |
-| `--temp` | 额外扫描 `_ModComponentTemp` |
-| `--scan-only` | 只扫描并打印统计 |
-| `--csv <路径>` | 导出结果 CSV |
+| Build | `dotnet build -c Release` and `-c Debug`, 0 warnings, 0 errors |
+| Scan | 46 containers, 423 blueprint records (16 recipes), 761 definitions, 480 item IDs, ~129 ms |
+| Search | Baselines below, reproduced on 2.55 |
+| Write path | Console stub over real container copies: 38 cases (create / update / rename / delete / binary / path validation / folder containers) |
+| Container editor | End-to-end in a sandbox copy: create -> edit -> rename -> delete, archive re-read and `testzip()` after each step |
+| Single-file publish | CLI and GUI smoke test from `dist\` |
 
-退出码：`0` 有结果，`1` 无匹配，`2` 参数错误，`3` 扫描异常，`4` 没解析到蓝图。
+Baseline queries (expected output with the 46-container corpus):
 
-带图形界面时也可以预置参数，方便做桌面快捷方式：
-
-```bat
-TLD_ModBlueprintFinder.exe --path "F:\...\TheLongDark" --item GEAR_ScrapMetal
-```
-
----
-
-## 7. 验证方法（用你的机器自测）
-
-在 2.55 实机（46 个容器 / 423 份蓝图 / 761 份物品定义）上的真实结果，可用来确认工具在你的环境里工作正常：
-
-| 命令 | 期望结果 |
+| Command | Expect |
 | --- | --- |
-| `--item GEAR_ScrapMetal` | 产物 **3** 条、原料 **28** 条、工具 **0** 条、物品定义 **1** 份（包含匹配到 `knifescrapmetal`） |
-| `--item GEAR_Hammer` | 产物 **1** 条、原料 **0** 条、工具 **26** 条、物品定义 **2** 份（`blacksmithhammer`、`stonehammer`） |
-| `--item GEAR_sugara` | 配方 **6** 条、物品定义 **1** 份，指向 `MoreMeds :: auto-mapped/sugara.json`，判定依据「同 mod 配方引用」 |
-| `--item GEAR_SugarA` | 同一份定义，但多一个「大小写不同」标记 —— 原版糖没有自己的 JSON，反推过去的是 MoreMeds 那件 |
-| `--item GEAR_Bones` | 原料 **3** 条、物品定义 **3** 份（`bones`、`orcabones1`、`orcabones2`，后两份靠包含匹配） |
-| `--item GEAR_1firconefuel` | 配方 **0** 条、物品定义 **2** 份，判定依据为「仅文件名」—— 有物品没配方是常态 |
-| `--item GEAR_UncookedBroth` | 产物 **1** 条，来源标为「食谱」`recipes/bonebroth.json`，原料含 `POWDER_Salt 0.01 kg` 与 `LIQUID_WaterPotable 1.5 L` |
-| `--item gear_scrapmetal`（全小写） | 与第一条完全一致，验证大小写不敏感 |
-| `--item GEAR_Acorn` | 产物 4 条（1 精确 + 3 前缀/包含）、原料 5 条、物品定义 3 份 |
-| `--item GEAR_Acorn --mode exact` | 产物 **1** 条、原料 **2** 条 |
-| `--item GEAR_Acorn --mode fuzzy` | 产物 3 条（排除精确那条） |
-| `--item GEAR_AcornShel` | 前缀匹配命中 `GEAR_AcornShelled`，界面标为斜体/橙色 |
-
-自检四步：
-
-1. `--scan-only` 看「蓝图记录」是否在数百条量级、「物品定义」是否与之同量级。若为 0，先确认 `Mods` 里真有 `*.modcomponent`。
-2. `--item GEAR_Hammer` 的「③ 作为工具」若为 0，说明只索引了部分 mod。
-3. 随便点开一条，右侧原始 JSON 的 `CraftedResult` 应与「产物」列一致 —— 这是字段映射正确的直接证据。
-4. 点开任意一条「④ 物品定义」，贴出的 JSON 顶层键应全是 `Mod*Component` / `Mod*Behaviour`。
-   若键名是 `Name`/`CraftedResult`，说明 `IsDefinitionEntry` 把配方误判成了定义。
-
----
-
-## 8. 已知边界
-
-- **不包含原版配方**。游戏本体的蓝图是 `ScriptableObject`，打包在 `tld_Data` 的资产里，不在任何 `modcomponent` 中。
-  因此查原版物品可能得到「无匹配」——工具会在无结果时明确说明这一点，而不是假装没有配方。
-  需要覆盖原版的话，得另行解析游戏资产，属于另一个工程。
-- **默认只读，写操作全在用户点按钮之后**。扫描、检索、导出都不会碰 `Mods`。
-  会写文件的有三处：
-  1. 程序所在目录的 `TLD_ModBlueprintFinder_settings.json`（记住上次路径与四个勾选项）；
-  2. 程序所在目录 `TLDMBF_modcomponent_backup\` 下的备份（点「备份」或勾了自动备份时点「保存修改」）；
-  3. 用户自己点「保存修改」写回的 `.modcomponent`，以及容器编辑器里的新建 / 重命名 / 删除
-     （详见 §10、§11）。
-  注意 1、2 的「程序所在目录」含义：把 exe 放进游戏根目录时，这两样都会落在游戏目录里，
-  所以 README 里明确建议别放进去。要彻底不碰游戏目录，可以把配置改回 `ApplicationData`。
-  路径取 `AppContext.BaseDirectory` 而不是 `Directory.GetCurrentDirectory()`：后者会被快捷方式的
-  「起始位置」和命令行启动时的工作目录改写，配置会散落到各处；`BaseDirectory` 在单文件发布下也稳定指向 exe 同目录。
-- **exe 放在只读位置时不报错也不落盘**：`SaveSettings()` 吞掉异常，代价是下次启动不记得上次路径。
-  这是刻意的 —— 一个记不住路径的提示比一个弹窗更烦人。
-- **单文件 exe 首次运行会往 `%TEMP%\.net\TLD_ModBlueprintFinder\<随机名>\` 解压约 8 MB 原生库**
-  （`vcruntime140_cor3.dll`、`D3DCompiler_47_cor3.dll` 等），这是 `IncludeNativeLibrariesForSelfExtract`
-  的既定行为。`%TEMP%` 被组策略锁死的机器会因此起不来，那种环境得改用框架依赖版。
-- **1.2.0 之前的版本把配置放在 `%APPDATA%\TLD_ModBlueprintFinder\settings.json`**，新版不再读写该位置。
-  升级后首次启动不会继承旧路径（只是「上次路径」这一项，重选一次即可），旧目录可手动删除。
-- **不校验 mod 是否生效**。DLL 类型 mod（不提供 modcomponent）不会出现在结果里。
-- `_ModComponentTemp` 默认不扫：它是 ModComponent 加载时解压的副本，扫了会与 zip 内容重复计数。
-  需要时用 `--temp` 或改 `ScanOptions.IncludeModComponentTemp`。
-- **配方检索**把大小写不同的两个 ID 当成同一个（`OrdinalIgnoreCase`）—— 这是为玩家手输体验做的取舍。
-  代价是 `GEAR_SugarA` 与 `GEAR_sugara` 这类同形异写的物品在配方列表里会一起出现。
-  物品定义那边不这么做：反推 ID 时优先大小写完全一致的候选，避免把两件物品的 JSON 装错。
-
----
-
-## 9. 修复记录
-
-### BUG-001（2026-10-25）：切回【作为产物】后详情不再切换
-
-现象：查 `GEAR_SugarA`（1 产物 + 4 原料），在【作为原料】点开别的蓝图后切回【作为产物】，
-右侧详情仍停在上一页签的蓝图，再点 `sugara` 那一行也没有反应。
-
-原因有两层，缺一不可：
-
-1. 详情刷新只挂在 `DataGridView.SelectionChanged` 上。点击**已经被选中**的行时选中集合没有变化，
-   事件不触发 —— 于是「点击」这个动作被完全忽略。
-2. 详情框是三个页签共用的一格，但没有任何代码在 `SelectedIndexChanged` 时把详情重新同步到
-   「当前页签里选中的那一行」，所以切页签那一步就已经在显示别的页签的内容了。
-
-修复（`Ui/MainForm.Ui.cs:348`、`Ui/MainForm.cs:611`）：
-
-- 额外监听 `CellClick`，覆盖「点已选中行」这个盲区；
-- 补 `TabControl.SelectedIndexChanged` → 按当前页签的表格重新渲染详情；
-- 切到空页签时明确写「没有匹配结果」，而不是继续挂着别的页签的蓝图；
-- 渲染前比对文本去重，避免连续触发把详情框的滚动位置弹回顶部。
-
-完整分析、复现步骤、回归用例见 [BUG-001-detail-switch.md](BUG-001-detail-switch.md)。
-
----
-
-## 10. 备份与就地修改
-
-界面上的四个按钮（详情栏第二排）：编辑 JSON / 保存修改 / 备份该 modcomponent / 自动备份。
-这一节讲的是「改检索结果里的那一条」；要改整个容器（新增文件、删除文件、改名）见 §11。
-代码在 `Editing/ModBackup.cs`（备份）、`Editing/ModComponentArchive.cs`（条目读写，纯 BCL，
-可脱离 WinForms 单独测）与 `Ui/MainForm.cs`（编辑态）。
-
-### 10.1 备份
-
-```
-<程序目录>\TLDMBF_modcomponent_backup\<mod名>.modcomponent-<yyyyMMdd_HHmmss>
-```
-
-- **时间戳做后缀而不是建时间目录**：同一 mod 的历次备份在资源管理器里紧挨着排，
-  一眼能看出改了几次；用目录就得逐层点进去。
-- 同名同秒重复备份（连点两下按钮）→ 追加 `-2`、`-3`，**绝不覆盖已有备份**。
-- 源是解压目录形式的 mod → 备份成同名**目录**（递归复制），命名规则相同。
-- 源不是 `.modcomponent` 扩展名（少数 mod 用 `.zip`）→ 备份里保留扩展名，免得看不出格式。
-- 备份就是整包字节复制，实测 md5 与原包一致；还原时把文件改回 `xxx.modcomponent` 丢回 `Mods` 即可。
-
-### 10.2 为什么是「重写整包」而不是原地改
-
-ZIP 没有原地替换条目的能力，`ZipArchiveMode.Update` 会把整个档案读进内存再整份写回，同样不是增量。
-所以写入走三步：
-
-```
-读原包 → 逐条复制到 <name>.<guid>.tmp（目标条目换新内容）→ File.Move 覆盖原包
-```
-
-- 好处：**任何时刻原包都是完整的**。中途失败只会留下一个 tmp，下次写会重用它，不会出现「改了一半、
-  游戏读不了」的包。
-- 目录条目（`auto-mapped/` 这种以 `/` 结尾、长度为 0 的）必须原样复制，
-  否则某些解包工具会看不到这些空目录。
-- 已验证：重写后条目数不变，**只有目标条目的内容哈希变化**，其余条目内容逐条比对一致。
-- 代价：整包重新压缩一遍。几十 MB 的容器要一两秒，界面在这期间是阻塞的（单文件工具，可接受）。
-
-### 10.3 编码与 BOM
-
-统一按 UTF-8 写；原条目带 BOM 就保留 BOM，否则不写。改的是文本，不该顺手改掉原作者的编码习惯。
-
-### 10.4 编辑态：为什么把左侧表格冻住
-
-`_edit` 不为 null 时：
-
-- `_tabs.Enabled = false` —— 编辑期间切不了页签、点不了别的行；
-- 详情框 `ReadOnly = false` 并换成淡黄底，按钮文案变「取消编辑」；
-- `ShowDetail()` 第一行就是 `if (_edit is not null) return;` —— 双保险，防止任何残留事件把缓冲冲掉。
-
-没有做「切换前弹窗问是否保存」那一套：状态机会复杂一个数量级，而用户照样可能点错。
-让这段时间根本切不动，行为更好预期，代价只是编辑时少看一眼列表。
-
-保存流程：
-
-```
-JSON 校验 →（勾了自动备份就备份）→ 写回容器 → 退出编辑态 → 全量重扫 → 自动重查
-```
-
-**必须重扫而不是局部更新**：索引里存的是解析后的原料/工具/产物，只换文本不重建索引，
-界面会显示「明明改了却没生效」。
-
-### 10.5 JSON 校验
-
-用 `JsonDocument.Parse` + `AllowTrailingCommas` + `Skip` 注释，与解析器同一套宽容策略。
-解析失败弹 Yes/No 并默认 No，但**允许硬存**：有些 mod 用游戏自己的宽松格式，
-一刀切挡死反而碍事。校验只保证「语法能被 .NET 读懂」，不保证游戏认得。
-
-### 10.6 已知取舍
-
-- 合并同名蓝图的行（一份蓝图有多个副本）只写第一份（`Primary`），状态栏会写明合并了几份。
-- 备份不会自动清理，反复改同一个 mod 会一直积累。
-- 游戏运行时写会失败（文件被占用），错误直接弹出来，原包不动。
-- 写回后 zip 内所有条目的压缩结果都会变，`git` 之类按字节比较的版本控制会显示整包变动 —— 这是重写的必然结果。
-
-### 10.7 怎么自测这段
-
-`Editing/ModBackup.cs` 不依赖 WinForms，可以建控制台桩工程链接它跑真实容器（参考
-`projects/ContainerSorterStub` 的做法）。值得覆盖的点：备份命名与字节一致、写回后条目数不变、
-非目标条目哈希不变、BOM 保持、写不存在的条目要报错且原包仍可读、目录型容器走直接写文件。
-
----
-
-## 11. 容器编辑器（增删改查）
-
-入口在详情栏第二排的「容器编辑器…」，窗口实现在 `Ui/ContainerEditorForm.cs`。
-打开时会带上当前选中行的容器与条目，直接落在正确的位置上；关闭后如果写过东西，
-主窗口自动重扫一遍（`AnyChange` 为真）。
-
-### 11.1 和行内编辑的分工
-
-| | 行内编辑（§10） | 容器编辑器（§11） |
-| --- | --- | --- |
-| 起点 | 检索结果里的某一行 | 某个 modcomponent |
-| 能看到什么 | 只有这一条 | 容器里的全部文件 |
-| 能做什么 | 改内容 | 新增 / 删除 / 重命名 / 改内容 |
-| 适合 | 顺手改个数值 | 摸结构、批量整理、加新配方 |
-
-两套都保留：顺着检索结果改一条是最常用的动作，把它挪进二级窗口反而绕远。
-
-### 11.2 四个操作对应的 API
-
-全部在 `Editing/ModComponentArchive.cs`，文件型容器走 ZIP 重写，目录型容器走文件系统，
-对外行为一致：
-
-| 操作 | API | 说明 |
-| --- | --- | --- |
-| 查 | `ListEntries` / `ReadContent` / `Exists` | 列条目（含目录）、读文本（含编码与二进制判定） |
-| 增 | `WriteText`（条目不存在时） | 父目录条目一并补上 |
-| 改 | `WriteText`（条目已存在时） | 保留原 BOM |
-| 删 | `Delete` | 文件型：重写包；目录型：删文件 + 收掉空目录 |
-| 重命名 | `Rename` | 内容原样搬运，不重新编码 |
-
-### 11.3 新建时把目录条目补齐
-
-ZIP 不要求目录条目，但不少解包工具（含 ModComponent 自己的解压流程）靠它还原结构。
-所以新增 `blueprints/sub/deep/x.json` 时，`blueprints/sub/` 与 `blueprints/sub/deep/`
-这两个缺失的目录条目会一起写进包里 —— **只补缺的，已有的不动**。
-
-### 11.4 二进制条目只读
-
-`bundle/` 里是贴图、字体、音频。判据是「内容含 NUL 字节」，命中就只显示一行说明、
-`ReadOnly = true`，避免把二进制当文本写回去。列表默认只列 `.json`，取消「只看 .json」才会看到它们。
-
-### 11.5 未保存的三道闸
-
-`_dirty` 一旦为真，以下三个动作都会先弹「保存 / 不保存 / 取消」：
-
-1. 在列表里切到别的条目；
-2. 切换顶部的容器；
-3. 关窗口。
-
-选「取消」时调用方必须中止：切条目会把选中拨回原处，切容器会把下拉框拨回 `_lastContainerIndex`。
-保存失败（校验没过又选了「否」、或写入抛异常）同样返回 false —— 不能因为保存失败就把用户的改动丢掉。
-
-**过滤不会丢内容**：当前条目被过滤掉且没有未保存改动时自动跳到第一条（让「过滤」等于「定位」）；
-有未保存改动时只清掉列表选中，编辑器内容原样留着，清空过滤就能找回来。
-
-### 11.6 新建模板
-
-按目录给骨架，避免建出一个游戏静默跳过的空文件：
-
-| 目标目录 | 模板 |
-| --- | --- |
-| `blueprints/` | `Name` + `RequiredGear` + `CraftedResult` + `DurationMinutes` + `RequiredCraftingLocation` |
-| `recipes/` | 外层 `RecipeName` / `RecipeDescription` / `RequiredSkillLevel` + 内层 `BlueprintData` |
-| `auto-mapped/` | `ModGenericComponent` + 两个本地化 key |
-
-容器里没有 `blueprints/` 但有 `recipes/` 时，默认路径会落在 `recipes/`；都没有才回落到 `blueprints/`。
-重名时默认路径自动加 `-2`、`-3`。
-
-### 11.7 怎么自测这段
-
-`ModComponentArchive` 不依赖 WinForms，控制台桩工程链接它就能跑真实容器。
-已覆盖 38 项（`analysis/EditStub`）：
-
-- 查：`ListEntries` 的文件数与 ZIP 一致、读文本、不存在返回 null；
-- 改：只有目标条目的哈希变化、其余条目逐条一致、ZIP 仍可完整读取、BOM 状态保持；
-- 增：条目出现、父目录条目补齐、既有条目不动；
-- 重命名：旧名消失 / 新名出现 / 内容哈希不变；
-- 删：条目消失、其余不动、ZIP 可读；
-- 错误路径：删不存在的条目抛错且**原包一个字节都没变**、重命名到自己抛错；
-- 路径校验：`..` / 盘符 / 非 `.json` / 非法字符全部拒绝；
-- 二进制识别：含 NUL 的条目 `IsBinary = true`、不返回文本；
-- 目录型容器：写入、建目录、重命名、删除、空目录回收。
+| `--item GEAR_ScrapMetal` | product 3, ingredient 28, tool 0, definitions 1 (contains-match on `knifescrapmetal`) |
+| `--item GEAR_Hammer` | product 1, ingredient 0, tool 26, definitions 2 (`blacksmithhammer`, `stonehammer`) |
+| `--item GEAR_sugara` | 5 recipe hits (2 products + 3 ingredients), 1 definition (`MoreMeds :: auto-mapped/sugara.json`), basis "same-mod reference" |
+| `--item GEAR_SugarA` | same definition, plus a "different case" mark - vanilla sugar has no JSON of its own |
+| `--item GEAR_Bones` | ingredient 3 (2 blueprints + 1 recipe), definitions 3 (`bones`, `orcabones1`, `orcabones2`) |
+| `--item GEAR_1firconefuel` | 0 recipe hits, 2 definitions, basis "file name only" - definitions without recipes are normal |
+| `--item GEAR_UncookedBroth` | group 4 has 1 row from `recipes/bonebroth.json`, ingredients include `POWDER_Salt 0.01 kg` and `LIQUID_WaterPotable 1.5 L` |
+| `--item GEAR_RawMeatBear` | group 2 has 3 rows, group 5 has 1 (`REC_BearStew`) - the groups do not overlap |
+| `--item GEAR_Acorn --mode exact` | product 1, ingredient 2 |
+| `--item GEAR_Acorn --mode fuzzy` | product 3 (the exact row is excluded) |
+
+Self-check in four steps:
+
+1. `--scan-only` reports hundreds of blueprint records and a comparable number of definitions. Zero means the
+   `Mods` folder holds no `*.modcomponent`.
+2. `--item GEAR_Hammer` group 3 is not zero, otherwise only part of the mods were indexed.
+3. Any row's raw JSON `CraftedResult` matches the "product" column - direct evidence that the field map is right.
+4. Any group 6 row shows only `Mod*Component` / `Mod*Behaviour` top-level keys. `Name` / `CraftedResult` there
+   means `IsDefinitionEntry` misclassified a recipe.
+
+Known boundaries:
+
+- **Vanilla recipes are not covered.** Base-game blueprints are `ScriptableObject` assets inside `tld_Data`,
+   not part of any modcomponent, so a vanilla item can legitimately return nothing. The UI says so instead of
+   pretending there are no recipes.
+- **Read-only by default.** Scanning, searching and exporting never touch `Mods`; writes only happen after an
+  explicit button and are listed in §4.
+- **DLL-only mods do not appear.** They ship no modcomponent.
+- **Case-insensitive recipe search** treats `GEAR_SugarA` and `GEAR_sugara` as one query, which is a deliberate
+  trade for hand-typed input. Definition lookup is not, see §6.

@@ -4,7 +4,7 @@ using System.Text;
 namespace TLD_ModBlueprintFinder.Editing;
 
 /// <summary>
-/// 容器里的一个条目（文件或目录）。目录条目只在列表里出现，不参与编辑。
+/// One entry in a container (file or directory). Directory entries are listed but never edited.
 /// </summary>
 public sealed record ArchiveEntry(string Path, long SizeBytes, DateTimeOffset? LastWriteTime, bool IsDirectory)
 {
@@ -21,7 +21,7 @@ public sealed record ArchiveEntry(string Path, long SizeBytes, DateTimeOffset? L
 
     public string SizeText => IsDirectory ? "" : FormatSize(SizeBytes);
 
-    /// <summary>列表里只显示「月-日 时:分」：年份对 mod 文件没有意义，宽度留给路径。</summary>
+    /// <summary>Shows only "month-day hour:minute": the year is noise for mod files, the width belongs to the path.</summary>
     public string TimeText => LastWriteTime is null
         ? ""
         : LastWriteTime.Value.LocalDateTime.ToString("MM-dd HH:mm");
@@ -34,28 +34,23 @@ public sealed record ArchiveEntry(string Path, long SizeBytes, DateTimeOffset? L
     };
 }
 
-/// <summary>读出来的条目内容。二进制条目（含 NUL 字节）只展示不写回。</summary>
+/// <summary>Content read back from an entry. Binary entries (containing NUL) are shown, never written.</summary>
 public sealed record EntryContent(string Text, bool IsBinary, long SizeBytes);
 
 /// <summary>
-/// modcomponent 容器内的条目读写 —— 增、删、改、查四件事的唯一入口。
-///
-/// .modcomponent 是 ZIP，改一份文件不能就地打补丁，只能整体重写：
-/// 读原包 → 逐条复制到临时文件（目标条目换内容 / 跳过 / 改名）→ 用临时文件替换原包。
-/// 这样**任何时候原包都是完整的**：中途失败只会留下一个临时文件，
-/// 不会出现「改了一半、连游戏都读不了」的包。
-///
-/// 解压目录形式的 mod 直接走文件系统，代码路径与 ZIP 分开但对外行为一致。
+/// The only way in or out for entry reads and writes - list, read, create, update, delete, rename.
+/// A .modcomponent is a ZIP, so one file cannot be patched in place: the archive is rewritten (copy
+/// every entry to a temp file, swapping / dropping / renaming the target, then replace). The original is
+/// therefore complete at every moment: a failure leaves a temp file, never a half-written container the
+/// game cannot load. Extracted-folder mods take the file-system path with the same external behavior.
 /// </summary>
 public static class ModComponentArchive
 {
     private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
 
-    // ────────────────────────────────────────────────────────────────────
-    // 查
-    // ────────────────────────────────────────────────────────────────────
+    // Lookup
 
-    /// <summary>列出容器内全部条目（含目录），按路径排序。</summary>
+    /// <summary>Lists every entry in the container (directories included), sorted by path.</summary>
     public static IReadOnlyList<ArchiveEntry> ListEntries(string containerPath)
     {
         var list = new List<ArchiveEntry>();
@@ -114,7 +109,7 @@ public static class ModComponentArchive
         return FindEntry(archive, normalized) is not null;
     }
 
-    /// <summary>读条目内容；条目不存在返回 null。</summary>
+    /// <summary>Reads entry content; null when the entry does not exist.</summary>
     public static EntryContent? ReadContent(string containerPath, string entryPath)
     {
         var normalized = Normalize(entryPath);
@@ -123,8 +118,8 @@ public static class ModComponentArchive
         var bytes = ReadBytes(containerPath, normalized);
         if (bytes is null) return null;
 
-        // 含 NUL 就按二进制处理：mod 里有 bundle、字体、贴图之类，
-        // 用文本编辑器硬开只会得到乱码，写回去更是灾难。
+        // A NUL byte means binary: containers hold bundles, fonts and textures, and forcing them through a
+        // text editor yields mojibake and corrupts them on write.
         var isBinary = Array.IndexOf(bytes, (byte)0) >= 0;
 
         return new EntryContent(isBinary ? "" : Decode(bytes), isBinary, bytes.Length);
@@ -151,13 +146,11 @@ public static class ModComponentArchive
         return memory.ToArray();
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 改 / 增
-    // ────────────────────────────────────────────────────────────────────
+    // Save and create
 
     /// <summary>
-    /// 写入一个条目：已存在就替换，不存在就新建（父目录条目会一并补上）。
-    /// 原条目带 BOM 就保留 BOM —— 改文本不该顺手改掉原作者的编码习惯。
+    /// Writes an entry: replaces it when present, creates it (with parent folders) when absent.
+    /// An existing BOM is preserved - editing text should not change the author's encoding.
     /// </summary>
     public static void WriteText(string containerPath, string entryPath, string text)
     {
@@ -185,9 +178,7 @@ public static class ModComponentArchive
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 删
-    // ────────────────────────────────────────────────────────────────────
+    // Delete
 
     public static void Delete(string containerPath, string entryPath)
     {
@@ -214,12 +205,10 @@ public static class ModComponentArchive
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 重命名
-    // ────────────────────────────────────────────────────────────────────
+    // Rename
 
     /// <summary>
-    /// 改条目路径。内容原样搬运（连 BOM 一起），不做重新编码。
+    /// Moves an entry to another path. Content is copied as-is (BOM included), never re-encoded.
     /// </summary>
     public static void Rename(string containerPath, string fromPath, string toPath)
     {
@@ -258,17 +247,15 @@ public static class ModComponentArchive
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 路径工具
-    // ────────────────────────────────────────────────────────────────────
+    // Path helpers
 
-    /// <summary>统一成容器内部路径：正斜杠、无前导斜杠。</summary>
+    /// <summary>Normalizes to an in-container path: forward slashes, no leading slash.</summary>
     public static string Normalize(string? entryPath) =>
         (entryPath ?? string.Empty).Replace('\\', '/').Trim().TrimStart('/');
 
     /// <summary>
-    /// 校验一个「准备新建 / 改名」的条目路径。返回 null 表示合法。
-    /// 只做格式校验，是否重名由调用方查 <see cref="Exists"/>。
+    /// Validates a path about to be created or renamed. Returns null when acceptable.
+    /// Format only; duplicate names are the caller's job via <see cref="Exists"/>.
     /// </summary>
     public static string? ValidateEntryPath(string? entryPath)
     {
@@ -297,18 +284,16 @@ public static class ModComponentArchive
         return null;
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // ZIP 重写内核
-    // ────────────────────────────────────────────────────────────────────
+    // ZIP rewrite core
 
-    /// <summary>一次重写要做的改动。三个字段互斥，同一时间只填一个。</summary>
+    /// <summary>The single change one rewrite applies. Exactly one field is set.</summary>
     private sealed class ZipEdit
     {
         public string? Remove { get; init; }
         public (string Path, byte[] Bytes)? Upsert { get; init; }
         public (string From, string To)? Rename { get; init; }
 
-        /// <summary>是否真的命中了目标条目（用于发现「改错包」）。</summary>
+        /// <summary>Whether the target entry was actually found (catches edits to the wrong archive).</summary>
         public bool Removed { get; set; }
         public bool Upserted { get; set; }
         public bool Renamed { get; set; }
@@ -324,7 +309,7 @@ public static class ModComponentArchive
             using (var source = ZipFile.OpenRead(zipPath))
             using (var target = new ZipArchive(File.Create(temp), ZipArchiveMode.Create))
             {
-                // 记下已有的目录条目，新建文件时才知道还缺哪几层
+                // Record existing directory entries, so a new file knows which folders are missing
                 var folders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
                 foreach (var entry in source.Entries)
@@ -374,7 +359,7 @@ public static class ModComponentArchive
             if (edit.Rename is not null && !edit.Renamed)
                 throw new InvalidOperationException($"这个 modcomponent 里找不到 {edit.Rename.Value.From}，可能已被其它程序改过。");
 
-            // 同一卷内 Move 是重命名，原包在被替换前一直是完整的
+            // A move within one volume is a rename, so the original stays intact until it is replaced
             File.Move(temp, zipPath, overwrite: true);
         }
         catch
@@ -385,9 +370,9 @@ public static class ModComponentArchive
     }
 
     /// <summary>
-    /// 新建深层条目时补上缺失的目录条目。
-    /// ZIP 本身不要求目录条目，但不少解包工具（含 ModComponent 自己的解压流程）
-    /// 依赖它来还原空目录，缺了会让 mod 的结构看着怪。
+    /// Adds the directory entries a new nested file implies.
+    /// ZIP does not require them, but many unpackers (including ModComponent's own) rely on them to restore
+    /// empty folders; without them the mod's structure looks broken.
     /// </summary>
     private static void EnsureParentFolders(ZipArchive target, HashSet<string> existing, string entryPath)
     {
@@ -431,9 +416,7 @@ public static class ModComponentArchive
         input.CopyTo(output);
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 小工具
-    // ────────────────────────────────────────────────────────────────────
+    // Small helpers
 
     private static bool IsDirectoryEntry(ZipArchiveEntry entry) =>
         entry.FullName.EndsWith("/", StringComparison.Ordinal) ||
@@ -459,7 +442,7 @@ public static class ModComponentArchive
     private static string ToRelative(string root, string path) =>
         Path.GetRelativePath(root, path).Replace('\\', '/');
 
-    /// <summary>删掉条目后收掉变空的目录（只在解压目录形式下有意义）。</summary>
+    /// <summary>Removes directories that became empty after a delete (extracted-folder containers only).</summary>
     private static void RemoveEmptyParents(string root, string? dir)
     {
         try
@@ -479,7 +462,7 @@ public static class ModComponentArchive
         }
         catch
         {
-            // 收不掉空目录不影响结果
+            // Failing to drop an empty folder does not affect the result
         }
     }
 
@@ -521,7 +504,7 @@ public static class ModComponentArchive
         }
         catch
         {
-            // 临时文件删不掉不影响结果
+            // A leftover temp file does not affect the result
         }
     }
 }

@@ -10,8 +10,7 @@ using TLD_ModBlueprintFinder.Parsing;
 namespace TLD_ModBlueprintFinder.Ui;
 
 /// <summary>
-/// 主窗口的业务逻辑。
-/// 分工：Ui 分部类只负责「长什么样」，这里只负责「做什么」。
+/// Business logic of the main window. The Ui partial class owns how it looks; this file owns what it does.
 /// </summary>
 public sealed partial class MainForm : Form
 {
@@ -31,9 +30,8 @@ public sealed partial class MainForm : Form
     public MainForm() : this(null, null) { }
 
     /// <summary>
-    /// 可选地预置路径与物品 ID。用于命令行启动：
-    ///   TLD_ModBlueprintFinder.exe --path "F:\...\TheLongDark" --item GEAR_AcornShelled
-    /// 这样可以把常用查询做成桌面快捷方式，双击直接出结果。
+    /// Optionally presets the path and the item ID so a shortcut can run a query:
+    ///   TLD_ModBlueprintFinder.exe --path "&lt;game root&gt;" --item GEAR_AcornShelled
     /// </summary>
     public MainForm(string? initialPath, string? initialItem)
     {
@@ -46,23 +44,21 @@ public sealed partial class MainForm : Form
         FormClosing += OnFormClosing;
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 生命周期
-    // ────────────────────────────────────────────────────────────────────
+    // Lifecycle
 
     private void OnFormLoad(object? sender, EventArgs e)
     {
-        // 列宽不会被 AutoScaleMode.Dpi 自动缩放，所以必须等句柄创建后再按实际 DPI 生成表格
+        // Column widths are not scaled by AutoScaleMode.Dpi, so the grids are built after the handle exists
         BuildGrids();
 
-        // 屏幕比窗口还小时先收一收，避免标题栏被顶到屏幕外
+        // Shrink first when the screen is smaller than the window, or the title bar ends up off-screen
         var work = Screen.FromControl(this).WorkingArea;
         if (Height > work.Height) Height = Math.Max(MinimumSize.Height, work.Height - S(40));
         if (Width > work.Width) Width = Math.Max(MinimumSize.Width, work.Width - S(40));
 
         var settings = LoadSettings();
 
-        // 命令行预置优先于上次记住的路径
+        // Command-line presets win over the remembered path
         var startPath = !string.IsNullOrWhiteSpace(_initialPath) ? _initialPath : settings.LastPath;
         _chkAutoBackup.Checked = settings.AutoBackup;
 
@@ -80,7 +76,7 @@ public sealed partial class MainForm : Form
                 _cmbMode.SelectedIndex = Math.Clamp(settings.MatchModeIndex, 0, _cmbMode.Items.Count - 1);
             }
 
-            // 路径可用就直接扫一遍，省得每次都点
+            // Scan right away when the path is usable, so it does not need a click every launch
             BeginScan(silent: true);
             return;
         }
@@ -105,9 +101,9 @@ public sealed partial class MainForm : Form
     }
 
     /// <summary>
-    /// 分隔条必须在窗口真正显示（完成第一次布局）之后才能定位。
-    /// 放在 Load 里会读到尚未布局的 Width（Dock=Fill 的控件此时宽度还是默认值），
-    /// 结果分隔条位置偏差很大。
+    /// The splitter can only be positioned once the window is really shown (first layout done).
+    /// Doing it in Load reads a Width that is still the default for Dock=Fill controls, which puts the
+    /// splitter far off.
     /// </summary>
     private void OnFormShown(object? sender, EventArgs e)
     {
@@ -122,7 +118,7 @@ public sealed partial class MainForm : Form
         }
         catch (ArgumentOutOfRangeException)
         {
-            // 窗口极小时忽略：SplitContainer 会保留默认的最小宽度限制
+            // Ignored on a tiny window: SplitContainer keeps its own minimum widths
         }
     }
 
@@ -132,9 +128,7 @@ public sealed partial class MainForm : Form
         SaveSettings();
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 路径选择
-    // ────────────────────────────────────────────────────────────────────
+    // Path selection
 
     private void OnBrowseClick(object? sender, EventArgs e)
     {
@@ -177,11 +171,10 @@ public sealed partial class MainForm : Form
     }
 
     /// <summary>
-    /// 找出所有可能的《漫漫长夜》安装目录，按「Mods 目录里最近一次文件更新时间」倒序。
-    ///
-    /// 为什么不能只取第一个：机器上往往同时存在多份安装（旧版本备份、不同 Steam 库），
-    /// 只按注册表或盘符顺序取会选错——实测这台机器上 E: 与 F: 各有一份，
-    /// 玩家实际在用的是 Mod 更新更频繁的那一份。
+    /// Finds every The Long Dark installation, newest Mods activity first.
+    /// Taking the first hit is not enough: machines often hold several installs (old backups, different
+    /// Steam libraries), and registry or drive order picks the wrong one - one machine had both E: and F:,
+    /// and the one in use was whichever Mods folder changed more recently.
     /// </summary>
     private static List<string> DetectGameFolders()
     {
@@ -205,7 +198,7 @@ public sealed partial class MainForm : Form
         }
         catch
         {
-            // 注册表读不到就退回到盘符枚举
+            // Fall back to enumerating drives when the registry read fails
         }
 
         foreach (var drive in new[] { "C:", "D:", "E:", "F:", "G:", "H:", "I:" })
@@ -238,7 +231,7 @@ public sealed partial class MainForm : Form
         }
     }
 
-    /// <summary>Mods 目录里最新的文件修改时间，用来判断「哪份安装是玩家现在在用的」。</summary>
+    /// <summary>Newest file time under Mods, used to tell which install the player is actually using.</summary>
     private static DateTime LatestModWriteTime(string gameRoot)
     {
         try
@@ -261,7 +254,7 @@ public sealed partial class MainForm : Form
         }
     }
 
-    /// <summary>极简 VDF 读取：只抽 "path" 后面的字符串值。</summary>
+    /// <summary>Minimal VDF reader: extracts the string value after "path".</summary>
     private static IEnumerable<string> ParseLibraryFolders(string vdfPath)
     {
         string[] lines;
@@ -288,15 +281,13 @@ public sealed partial class MainForm : Form
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 扫描
-    // ────────────────────────────────────────────────────────────────────
+    // Scanning
 
     private async void OnScanClick(object? sender, EventArgs e) => await ScanAsync(silent: false).ConfigureAwait(true);
 
     private async void BeginScan(bool silent = false)
     {
-        // 事件处理器风格的 fire-and-forget：ScanAsync 内部已完整捕获异常
+        // Fire-and-forget handler: ScanAsync catches everything internally
         await ScanAsync(silent).ConfigureAwait(true);
     }
 
@@ -304,7 +295,7 @@ public sealed partial class MainForm : Form
     {
         if (_busy) return;
 
-        // 编辑期间重新扫描会把表格与详情重建，缓冲里的内容就没了
+        // Rescanning during an edit rebuilds the tables and loses the unsaved buffer
         if (_edit is not null && !silent)
         {
             MessageBox.Show(this, "正在编辑 JSON，请先「保存修改」或「取消编辑」，再重新扫描。",
@@ -349,7 +340,7 @@ public sealed partial class MainForm : Form
         }
         catch (ArgumentException ex)
         {
-            // 路径类问题：ResolveInput 明确抛出的用户级错误
+            // Path-level problems: user-facing errors thrown by ResolveInput
             if (!silent)
                 MessageBox.Show(this, ex.Message, "路径无效", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             SetStatus(ex.Message, Color.Firebrick);
@@ -380,17 +371,21 @@ public sealed partial class MainForm : Form
         Bind(_gridProduct, Array.Empty<SearchRow>());
         Bind(_gridIngredient, Array.Empty<SearchRow>());
         Bind(_gridTool, Array.Empty<SearchRow>());
+        Bind(_gridRecipeProduct, Array.Empty<SearchRow>());
+        Bind(_gridRecipeIngredient, Array.Empty<SearchRow>());
         Bind(_gridDefinition, Array.Empty<DefinitionRow>());
-        _pageProduct.Text = "① 作为产物";
-        _pageIngredient.Text = "② 作为原料";
+        _pageProduct.Text = "① 作为产物（蓝图）";
+        _pageIngredient.Text = "② 作为原料（蓝图）";
         _pageTool.Text = "③ 作为工具";
-        _pageDefinition.Text = "④ 物品定义";
+        _pageRecipeProduct.Text = "④ 作为产物（食谱）";
+        _pageRecipeIngredient.Text = "⑤ 作为原料（食谱）";
+        _pageDefinition.Text = "⑥ 物品定义";
 
-        // 表格清空后选中行没了，按钮必须跟着禁用，否则会拿旧行的路径去备份
+        // Clearing the table drops the selected row, so the buttons must be disabled or they back up a stale path
         UpdateEditButtons();
 
-        // 只有「配方和物品定义都为空」才算真的没东西可看：
-        // 有些 mod 只提供 auto-mapped 定义、不带任何配方，那种情况照样要能查。
+        // Only "no recipes and no definitions" means there is nothing to show: some mods ship auto-mapped
+        // definitions with no recipes, and those must still be queryable.
         if (report.Records.Count == 0 && report.Definitions.Count == 0)
         {
             _txtDetail.Text = BuildEmptyReport(report);
@@ -417,14 +412,12 @@ public sealed partial class MainForm : Form
             $"扫描完成：{report.Containers.Count} 个容器（失败 {failed}），{report.Records.Count} 条蓝图 + {report.Definitions.Count} 份物品定义，耗时 {report.Elapsed.TotalMilliseconds:0} ms。",
             failed > 0 || report.Errors.Count > 0 ? Color.DarkOrange : Color.ForestGreen);
 
-        // 已经填了物品 ID 就顺手查一次
+        // Run a search right away when an item ID is already filled in
         if (!string.IsNullOrWhiteSpace(_txtItem.Text))
             RunSearch();
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 检索
-    // ────────────────────────────────────────────────────────────────────
+    // Search
 
     private void OnSearchClick(object? sender, EventArgs e) => RunSearch();
 
@@ -476,14 +469,21 @@ public sealed partial class MainForm : Form
         Bind(_gridProduct, _outcome.AsProduct);
         Bind(_gridIngredient, _outcome.AsIngredient);
         Bind(_gridTool, _outcome.AsTool);
+        Bind(_gridRecipeProduct, _outcome.AsRecipeProduct);
+        Bind(_gridRecipeIngredient, _outcome.AsRecipeIngredient);
         Bind(_gridDefinition, _outcome.Definitions);
 
-        _pageProduct.Text = $"① 作为产物 ({_outcome.AsProduct.Count})";
-        _pageIngredient.Text = $"② 作为原料 ({_outcome.AsIngredient.Count})";
+        _pageProduct.Text = $"① 作为产物（蓝图） ({_outcome.AsProduct.Count})";
+        _pageIngredient.Text = $"② 作为原料（蓝图） ({_outcome.AsIngredient.Count})";
         _pageTool.Text = $"③ 作为工具 ({_outcome.AsTool.Count})";
-        _pageDefinition.Text = $"④ 物品定义 ({_outcome.Definitions.Count})";
+        _pageRecipeProduct.Text = $"④ 作为产物（食谱） ({_outcome.AsRecipeProduct.Count})";
+        _pageRecipeIngredient.Text = $"⑤ 作为原料（食谱） ({_outcome.AsRecipeIngredient.Count})";
+        _pageDefinition.Text = $"⑥ 物品定义 ({_outcome.Definitions.Count})";
 
-        _lblCounts.Text = $"产物 {_outcome.AsProduct.Count} ｜ 原料 {_outcome.AsIngredient.Count} ｜ 工具 {_outcome.AsTool.Count} ｜ 定义 {_outcome.Definitions.Count}";
+        _lblCounts.Text =
+            $"蓝图产物 {_outcome.AsProduct.Count} ｜ 蓝图原料 {_outcome.AsIngredient.Count} ｜ 工具 {_outcome.AsTool.Count}" +
+            $" ｜ 食谱产物 {_outcome.AsRecipeProduct.Count} ｜ 食谱原料 {_outcome.AsRecipeIngredient.Count}" +
+            $" ｜ 定义 {_outcome.Definitions.Count}";
 
         if (_outcome.IsEmpty)
         {
@@ -512,6 +512,7 @@ public sealed partial class MainForm : Form
         else
         {
             var inexact = _outcome.AsProduct.Concat(_outcome.AsIngredient).Concat(_outcome.AsTool)
+                .Concat(_outcome.AsRecipeProduct).Concat(_outcome.AsRecipeIngredient)
                 .Count(r => r.Quality != MatchQuality.Exact);
 
             var note = inexact > 0
@@ -525,10 +526,12 @@ public sealed partial class MainForm : Form
             SetStatus($"「{query}」共命中配方 {_outcome.TotalHits} 条{defNote}。{note}",
                 inexact > 0 ? Color.DarkOrange : Color.ForestGreen);
 
-            // 自动选中第一个非空结果的详情
+            // Auto-select the detail of the first non-empty group
             if (_outcome.AsProduct.Count > 0) SelectFirstRow(_tabs, _pageProduct, _gridProduct);
             else if (_outcome.AsIngredient.Count > 0) SelectFirstRow(_tabs, _pageIngredient, _gridIngredient);
             else if (_outcome.AsTool.Count > 0) SelectFirstRow(_tabs, _pageTool, _gridTool);
+            else if (_outcome.AsRecipeProduct.Count > 0) SelectFirstRow(_tabs, _pageRecipeProduct, _gridRecipeProduct);
+            else if (_outcome.AsRecipeIngredient.Count > 0) SelectFirstRow(_tabs, _pageRecipeIngredient, _gridRecipeIngredient);
             else if (_outcome.Definitions.Count > 0) SelectFirstRow(_tabs, _pageDefinition, _gridDefinition);
         }
     }
@@ -542,19 +545,19 @@ public sealed partial class MainForm : Form
         grid.CurrentCell = grid.Rows[0].Cells[0];
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 详情 / 复制 / 导出
-    // ────────────────────────────────────────────────────────────────────
+    // Detail / copy / export
 
     private void _gridProduct_SelectionChanged(object? sender, EventArgs e) => ShowDetail(_gridProduct);
     private void _gridIngredient_SelectionChanged(object? sender, EventArgs e) => ShowDetail(_gridIngredient);
     private void _gridTool_SelectionChanged(object? sender, EventArgs e) => ShowDetail(_gridTool);
+    private void _gridRecipeProduct_SelectionChanged(object? sender, EventArgs e) => ShowDetail(_gridRecipeProduct);
+    private void _gridRecipeIngredient_SelectionChanged(object? sender, EventArgs e) => ShowDetail(_gridRecipeIngredient);
     private void _gridDefinition_SelectionChanged(object? sender, EventArgs e) => ShowDetail(_gridDefinition);
 
     /// <summary>
-    /// 非精确命中的行改成橙色 / 灰色 + 斜体。
-    /// 这是必要的：用户输 "GEAR_AcornShel" 时前缀匹配会命中 GEAR_AcornShelled，
-    /// 不做视觉区分的话很容易把「凑出来的结果」当成真的。
+    /// Renders non-exact hits in orange or grey italics.
+    /// This matters: typing "GEAR_AcornShel" prefix-matches GEAR_AcornShelled, and without the visual
+    /// difference a widened match is easy to mistake for a real one.
     /// </summary>
     private void OnGridCellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
     {
@@ -563,10 +566,10 @@ public sealed partial class MainForm : Form
         if (row.Quality == MatchQuality.Exact) return;
 
         e.CellStyle.ForeColor = row.Quality == MatchQuality.Prefix
-            ? Color.FromArgb(181, 96, 6)      // 前缀：深橙
-            : Color.FromArgb(120, 120, 120);  // 包含：中灰
+            ? Color.FromArgb(181, 96, 6)      // prefix: dark orange
+            : Color.FromArgb(120, 120, 120);  // contains: mid grey
 
-        // 第一列是「这条结果叫什么」，非精确命中时用斜体区分
+        // First column is "what this result is called"; italic marks a widened match
         if (e.ColumnIndex == 0 || grid.Columns[e.ColumnIndex].Name == nameof(SearchRow.BlueprintName))
             e.CellStyle.Font = new Font(grid.Font, FontStyle.Italic);
     }
@@ -584,11 +587,12 @@ public sealed partial class MainForm : Form
             return;
         }
 
-        // 长文本列被截断时，悬停显示完整内容
+        // Show the full value on hover when a long text column is truncated
         var column = grid.Columns[e.ColumnIndex].Name;
         if (column is nameof(SearchRow.ModSources)
             or nameof(SearchRow.IngredientsText)
             or nameof(SearchRow.ToolsText)
+            or nameof(SearchRow.RecipeKey)
             or nameof(SearchRow.BlueprintName))
         {
             e.ToolTipText = grid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString();
@@ -596,13 +600,13 @@ public sealed partial class MainForm : Form
     }
 
     /// <summary>
-    /// 把指定表格的当前行渲染到右侧详情框。
-    /// 详情框是三个页签共用的一格，所以「谁在选中状态」必须由当前可见的那个表格决定，
-    /// 不能靠「上一次点过哪个格子」来记。
+    /// Renders the current row of the given grid into the detail box.
+    /// The detail box is shared by every tab, so "who is selected" must come from the visible grid, not
+    /// from "which cell was clicked last".
     /// </summary>
     private void ShowDetail(DataGridView grid)
     {
-        // 编辑期间绝不改写文本框：Buffer 里是用户还没保存的内容
+        // Never overwrite the text box while editing: the buffer holds unsaved user input
         if (_edit is not null) return;
 
         var row = CurrentRow(grid);
@@ -614,14 +618,14 @@ public sealed partial class MainForm : Form
 
         var text = row.BuildDetailText();
 
-        // 同一条内容不重复渲染：选中变化与鼠标点击会先后触发本方法，
-        // 不去重的话详情框的滚动位置会被连续两次重置，读长 JSON 时很难受。
+        // Do not re-render identical text: selection change and mouse click both reach this method, and
+        // rendering twice resets the scroll position, which makes reading long JSON painful.
         if (_txtDetail.Text != text) SetDetailText(text);
 
         UpdateEditButtons();
     }
 
-    /// <summary>当前选中行的详情对象；多选时优先当前行，退而取第一条选中行。</summary>
+    /// <summary>Detail object of the current row; on multi-select prefer the current row, then the first.</summary>
     private static IDetailRow? CurrentRow(DataGridView grid)
     {
         var row = grid.CurrentRow?.DataBoundItem as IDetailRow;
@@ -631,7 +635,7 @@ public sealed partial class MainForm : Form
         return row;
     }
 
-    /// <summary>按「有没有选中行 / 是否在编辑」刷新三个按钮的可用状态。</summary>
+    /// <summary>Enables or disables the three buttons from "is a row selected" and "is an edit open".</summary>
     private void UpdateEditButtons()
     {
         var row = CurrentRow(ActiveGrid());
@@ -651,17 +655,19 @@ public sealed partial class MainForm : Form
         _txtDetail.ScrollToCaret();
     }
 
-    /// <summary>当前页签对应的表格。</summary>
+    /// <summary>Grid belonging to the current tab.</summary>
     private DataGridView ActiveGrid() =>
         _tabs.SelectedTab == _pageIngredient ? _gridIngredient
         : _tabs.SelectedTab == _pageTool ? _gridTool
+        : _tabs.SelectedTab == _pageRecipeProduct ? _gridRecipeProduct
+        : _tabs.SelectedTab == _pageRecipeIngredient ? _gridRecipeIngredient
         : _tabs.SelectedTab == _pageDefinition ? _gridDefinition
         : _gridProduct;
 
     /// <summary>
-    /// 切换页签时重新同步详情。
-    /// 缺了这一步，详情框会停留在「上一次点击的那一行」上，而那一行很可能属于另一个页签，
-    /// 于是出现「页签已经切了、详情还是旧的」这种不一致。
+    /// Resyncs the detail panel when the tab changes.
+    /// Without this the panel keeps showing the row that was clicked last, which may belong to another
+    /// tab - the tab has switched but the detail is stale.
     /// </summary>
     private void OnTabChanged(object? sender, EventArgs e)
     {
@@ -671,8 +677,8 @@ public sealed partial class MainForm : Form
         {
             UpdateEditButtons();
 
-            // 空页签：明确说明这一页没有结果，
-            // 而不是继续显示别的页签里的蓝图（那会被误读成这一页的内容）。
+            // Empty tab: say so explicitly instead of leaving another tab's blueprint on screen, which would
+            // read as content of this tab.
             if (_outcome is { IsEmpty: false })
                 SetDetailText($"「{_tabs.SelectedTab?.Text}」没有匹配结果。\n\n" +
                               "这是正常现象：该物品没有出现在这个位置。\n" +
@@ -680,7 +686,7 @@ public sealed partial class MainForm : Form
             return;
         }
 
-        // 页签首次显示时表格可能还没有当前行，补一个
+        // The grid may have no current row yet when the tab first shows; set one
         if (grid.CurrentRow is null)
         {
             grid.ClearSelection();
@@ -736,13 +742,11 @@ public sealed partial class MainForm : Form
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 备份与就地修改
-    // ────────────────────────────────────────────────────────────────────
+    // Backup and in-place editing
 
     /// <summary>
-    /// 一次编辑会话。记下「改的是哪个容器的哪个条目」以及原文，
-    /// 这样保存时不必依赖当前选中行 —— 万一表格状态变了也不会写错文件。
+    /// One edit session. Records which container and entry are being edited plus the original text, so
+    /// saving never depends on the current row - a table change cannot redirect the write.
     /// </summary>
     private sealed record EditSession(string ContainerPath, string EntryPath, string OriginalText, IDetailRow Row);
 
@@ -751,8 +755,8 @@ public sealed partial class MainForm : Form
     private void OnAutoBackupChanged(object? sender, EventArgs e) => SaveSettings();
 
     /// <summary>
-    /// 打开容器编辑器：从「改一条」升级到「改一整个 modcomponent」。
-    /// 带上当前选中行的容器与条目，打开就落在正确的位置上。
+    /// Opens the container editor: from "edit one entry" to "edit a whole modcomponent".
+    /// It receives the current row's container and entry, so it opens on the right spot.
     /// </summary>
     private void OnOpenEditorClick(object? sender, EventArgs e)
     {
@@ -837,11 +841,11 @@ public sealed partial class MainForm : Form
 
         _edit = new EditSession(row.ContainerPath, row.EntryPath, row.EditableJson, row);
 
-        // 冻结左侧表格：编辑期间切换条目会把缓冲里的内容冲掉。
-        // 与其做「切换前弹窗问是否保存」那套，不如让这段时间根本切不动，行为更好预期。
+        // Freezes the left table: switching rows during an edit would discard the buffer. Rather than asking
+        // "save before switching?", making the switch impossible is far more predictable.
         _tabs.Enabled = false;
         _txtDetail.ReadOnly = false;
-        _txtDetail.BackColor = Color.FromArgb(255, 252, 235);   // 淡黄 = 编辑中
+        _txtDetail.BackColor = Color.FromArgb(255, 252, 235);   // pale yellow = editing
         _txtDetail.Text = row.EditableJson;
         _txtDetail.SelectionStart = 0;
         _txtDetail.ScrollToCaret();
@@ -930,7 +934,7 @@ public sealed partial class MainForm : Form
                 : $"已写入 {session.EntryPath}，备份：{Path.GetFileName(backupPath)}。正在重新扫描…",
             Color.ForestGreen);
 
-        // 改完必须重新解析：索引里还是旧的原料/工具，界面会显示改了但没生效的假象
+        // The index must be rebuilt after a write, or the UI shows "saved but nothing changed"
         await ScanAsync(silent: true).ConfigureAwait(true);
     }
 
@@ -988,9 +992,7 @@ public sealed partial class MainForm : Form
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 状态与忙碌态
-    // ────────────────────────────────────────────────────────────────────
+    // Status and busy state
 
     private void SetBusy(bool busy)
     {
@@ -1011,9 +1013,7 @@ public sealed partial class MainForm : Form
         _lblStatus.ForeColor = color ?? SystemColors.ControlText;
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 报告文本
-    // ────────────────────────────────────────────────────────────────────
+    // Report text
 
     private static string BuildEmptyReport(ScanReport report)
     {
@@ -1083,9 +1083,7 @@ public sealed partial class MainForm : Form
         return sb.ToString();
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 设置持久化（写在程序所在目录，绿色版式，绝不写进游戏目录）
-    // ────────────────────────────────────────────────────────────────────
+    // Settings (next to the exe, portable, never inside the game folder)
 
     private sealed class AppSettings
     {
@@ -1094,17 +1092,17 @@ public sealed partial class MainForm : Form
         public bool MergeDuplicates { get; set; } = true;
         public int MatchModeIndex { get; set; }
 
-        /// <summary>「保存修改」前是否自动备份原 modcomponent。默认开 —— 这是唯一会覆盖用户文件的操作。</summary>
+        /// <summary>Back up the original before "Save changes". On by default - the only operation that overwrites user files.</summary>
         public bool AutoBackup { get; set; } = true;
     }
 
-    /// <summary>设置文件名。带上程序名，避免和别的工具挤在同一目录时互相覆盖。</summary>
+    /// <summary>Settings file name. Prefixed with the tool name so another tool in the same folder cannot collide.</summary>
     private const string SettingsFileName = "TLD_ModBlueprintFinder_settings.json";
 
     /// <summary>
-    /// 设置文件：与 exe 同目录的 TLD_ModBlueprintFinder_settings.json。
-    /// 用 BaseDirectory 而不是 CurrentDirectory，启动时的工作目录才不会把配置甩到
-    /// 快捷方式的「起始位置」或命令行所在目录去。
+    /// Settings file: TLD_ModBlueprintFinder_settings.json next to the exe.
+    /// BaseDirectory rather than CurrentDirectory, so the launch working directory (a shortcut's "Start in",
+    /// or the shell) cannot scatter the config elsewhere.
     /// </summary>
     private static string SettingsFile => Path.Combine(AppContext.BaseDirectory, SettingsFileName);
 
@@ -1140,7 +1138,7 @@ public sealed partial class MainForm : Form
         }
         catch
         {
-            // 设置保存失败不影响主流程（exe 放在只读目录时就是这种情况，下次启动照常先扫一遍）
+            // A failed settings save must not block the main flow (read-only folder); the next launch just scans again
         }
     }
 }

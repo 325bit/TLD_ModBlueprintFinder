@@ -2,33 +2,33 @@ using TLD_ModBlueprintFinder.Models;
 
 namespace TLD_ModBlueprintFinder.Indexing;
 
-/// <summary>匹配质量。数值越小越精确，用于结果排序与界面着色。</summary>
+/// <summary>Match strength. Lower is more precise; used for ordering and for coloring rows.</summary>
 public enum MatchQuality
 {
     None = 0,
-    /// <summary>完全相等（忽略大小写）。</summary>
+    /// <summary>Identical (case-insensitive).</summary>
     Exact = 1,
-    /// <summary>以查询串开头。</summary>
+    /// <summary>Starts with the query.</summary>
     Prefix = 2,
-    /// <summary>包含查询串。</summary>
+    /// <summary>Contains the query.</summary>
     Contains = 3
 }
 
-/// <summary>用户可选的匹配强度。三档互不重叠，避免「选了跟没选一样」。</summary>
+/// <summary>Match modes offered to the user. The three are disjoint, so none behaves like another.</summary>
 public enum MatchMode
 {
-    /// <summary>自动：精确 &gt; 前缀 &gt; 包含，全部列出并按精确度排序。</summary>
+    /// <summary>Auto: exact &gt; prefix &gt; contains, all listed and ordered by precision.</summary>
     Auto,
-    /// <summary>只出完全相等的结果。</summary>
+    /// <summary>Identical IDs only.</summary>
     ExactOnly,
-    /// <summary>只看「名字里包含查询串」，且排除完全相等的那条（用来捞一批同族 ID）。</summary>
+    /// <summary>Only "contains", exact excluded - used to sweep a family of IDs.</summary>
     Fuzzy
 }
 
 /// <summary>
-/// 蓝图索引。把 417 条记录预先摊成三张倒排表，让「产物 / 原料 / 工具」三条检索路径都变成 O(1) 查表。
-/// 数据量不大（当前实机约 400 条），但倒排的意义在于：即使用户以后把原版蓝图也灌进来（数千条），
-/// 匹配逻辑也不用改。
+/// Blueprint index: one flat list plus three inverted tables (product / ingredient / tool), turning each
+/// search path into a dictionary lookup. The inverted tables matter for growth, not for today's few
+/// hundred records: feeding vanilla blueprints in later needs no change to the matching code.
 /// </summary>
 public sealed class BlueprintIndex
 {
@@ -44,14 +44,14 @@ public sealed class BlueprintIndex
 
         foreach (var bp in _all)
         {
-            // 产物倒排
+            // Product inverted table
             if (!string.IsNullOrWhiteSpace(bp.CraftedResult))
             {
                 Add(_byResult, bp.CraftedResult, bp);
                 _knownIds.Add(bp.CraftedResult);
             }
 
-            // 原料倒排（Gear / Powder / Liquid）
+            // Ingredient inverted table (gear / powder / liquid)
             foreach (var ing in bp.Ingredients)
             {
                 if (string.IsNullOrWhiteSpace(ing.ItemId)) continue;
@@ -59,7 +59,7 @@ public sealed class BlueprintIndex
                 _knownIds.Add(ing.ItemId);
             }
 
-            // 工具倒排
+            // Tool inverted table
             foreach (var tool in bp.Tools)
             {
                 if (string.IsNullOrWhiteSpace(tool.ItemId)) continue;
@@ -92,54 +92,62 @@ public sealed class BlueprintIndex
         list.Add(value);
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // 三条检索路径
-    // ────────────────────────────────────────────────────────────────────
+    // Three search paths. All accept kindFilter: a blueprints/ blueprint and a recipes/ recipe are the
+    // same model, but players ask different questions - "what can this meat cook into" is not "what tools
+    // can this meat make". A null filter means both kinds.
 
-    /// <summary>正向：以 query 为「产物」的蓝图。</summary>
+    /// <summary>Forward: blueprints whose product is query.</summary>
     internal IEnumerable<(BlueprintRecord Blueprint, MatchQuality Quality, string MatchedId)> SearchAsProduct(
-        string query, MatchMode mode)
+        string query, MatchMode mode, BlueprintSourceKind? kindFilter = null)
     {
         foreach (var (id, list) in _byResult)
         {
             var q = Evaluate(id, query, mode);
             if (q == MatchQuality.None) continue;
-            foreach (var bp in list) yield return (bp, q, id);
+            foreach (var bp in list)
+            {
+                if (kindFilter.HasValue && bp.SourceKind != kindFilter.Value) continue;
+                yield return (bp, q, id);
+            }
         }
     }
 
-    /// <summary>反向：以 query 为「原料」（Gear/Powder/Liquid）的蓝图。</summary>
+    /// <summary>Reverse: blueprints consuming query as gear/powder/liquid.</summary>
     internal IEnumerable<(BlueprintRecord Blueprint, MatchQuality Quality, Ingredient Ingredient)> SearchAsIngredient(
-        string query, MatchMode mode)
+        string query, MatchMode mode, BlueprintSourceKind? kindFilter = null)
     {
         foreach (var (id, list) in _byIngredient)
         {
             var q = Evaluate(id, query, mode);
             if (q == MatchQuality.None) continue;
-            foreach (var pair in list) yield return (pair.Blueprint, q, pair.Ingredient);
+            foreach (var pair in list)
+            {
+                if (kindFilter.HasValue && pair.Blueprint.SourceKind != kindFilter.Value) continue;
+                yield return (pair.Blueprint, q, pair.Ingredient);
+            }
         }
     }
 
-    /// <summary>反向：以 query 为「工具」（必需/可选/锅具）的蓝图。</summary>
+    /// <summary>Reverse: blueprints needing or accepting query as a tool (required / optional / pot).</summary>
     internal IEnumerable<(BlueprintRecord Blueprint, MatchQuality Quality, Ingredient Ingredient)> SearchAsTool(
-        string query, MatchMode mode)
+        string query, MatchMode mode, BlueprintSourceKind? kindFilter = null)
     {
         foreach (var (id, list) in _byTool)
         {
             var q = Evaluate(id, query, mode);
             if (q == MatchQuality.None) continue;
-            foreach (var pair in list) yield return (pair.Blueprint, q, pair.Ingredient);
+            foreach (var pair in list)
+            {
+                if (kindFilter.HasValue && pair.Blueprint.SourceKind != kindFilter.Value) continue;
+                yield return (pair.Blueprint, q, pair.Ingredient);
+            }
         }
     }
 
     /// <summary>
-    /// 匹配强度判定。
-    /// 注意：物品 ID 本身是大小写敏感的符号，但玩家手输时不该被大小写惩罚，
-    /// 所以一律用 OrdinalIgnoreCase 比较。
-    ///
-    ///   Auto      → Exact / Prefix / Contains 都算，靠 MatchQuality 分级排序
-    ///   ExactOnly → 只有 Exact
-    ///   Fuzzy     → 只有 Contains，且排除 Exact（否则搜 Water 会先撞上精确的那条）
+    /// Match strength. Item IDs are case-sensitive symbols, but a hand-typed query must not be punished for
+    /// casing, so every comparison is OrdinalIgnoreCase.
+    /// Fuzzy excludes exact matches, otherwise searching "Water" hits the exact row first and hides the family.
     /// </summary>
     internal static MatchQuality Evaluate(string candidateId, string query, MatchMode mode)
     {
@@ -170,8 +178,8 @@ public sealed class BlueprintIndex
     }
 
     /// <summary>
-    /// 查无结果时的「你是不是想找」建议。
-    /// 先做双向包含匹配，再退化为编辑距离，避免用户把 GEAR_Acorn 打成 Acorn 就一片空白。
+    /// "Did you mean" suggestions when nothing matched: bidirectional containment first, then edit distance,
+    /// so typing "Acorn" for "GEAR_Acorn" does not return a blank screen.
     /// </summary>
     public IReadOnlyList<string> SuggestSimilarIds(string query, int max = 8)
     {
@@ -187,7 +195,7 @@ public sealed class BlueprintIndex
 
             var score = 0;
 
-            // 去掉 GEAR_/LIQUID_/POWDER_ 前缀后比较，玩家往往只记得裸名字
+            // Compare bare names too: players usually remember the name without the prefix.
             var bare = ItemIds.StripPrefix(id);
             var bareQuery = ItemIds.StripPrefix(q);
 

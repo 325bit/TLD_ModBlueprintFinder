@@ -4,19 +4,14 @@ using System.Text.Json;
 namespace TLD_ModBlueprintFinder.Parsing;
 
 /// <summary>
-/// 宽容的 JSON 取值助手。
-///
-/// modcomponent 的蓝图字段在不同 mod、不同 ModComponent 版本之间差异很大，例如：
-///   - 计数既可能写成数字 3，也可能写成字符串 "3"
-///   - Count 可能缺失，改用 Quantity + Units 表达重量
-///   - 旧版用 GunpowderRequired，新版用 GunpowderKGRequired
-///   - 数组元素既可能是对象，也可能是纯字符串
-/// 因此这里一律只做「尽力取值」，取不到返回 null，由调用方决定降级策略，
-/// 绝不对字段类型做强假设（否则一个 mod 写错就把整次扫描拖崩）。
+/// Lenient JSON accessors: every getter tries its best and returns null instead of throwing.
+/// Fields differ across mods and ModComponent versions - a count may be 3 or "3", Count may be
+/// replaced by Quantity + Units, array elements may be objects or plain strings. One malformed mod
+/// must not abort a whole scan, so the caller decides how to degrade.
 /// </summary>
 internal static class JsonHelpers
 {
-    /// <summary>按优先级尝试多个属性名（大小写不敏感），返回第一个存在的值。</summary>
+    /// <summary>Tries several property names (case-insensitive) and returns the first hit.</summary>
     public static bool TryGet(JsonElement obj, out JsonElement value, params string[] names)
     {
         if (obj.ValueKind == JsonValueKind.Object)
@@ -38,7 +33,7 @@ internal static class JsonHelpers
         return false;
     }
 
-    /// <summary>取字符串；数字/布尔会转成文本，对象/数组/Null 返回 null。</summary>
+    /// <summary>Reads a string; numbers and booleans are stringified, objects/arrays/null give null.</summary>
     public static string? GetString(JsonElement obj, params string[] names)
     {
         if (!TryGet(obj, out var v, names)) return null;
@@ -63,7 +58,7 @@ internal static class JsonHelpers
         }
     }
 
-    /// <summary>取数字；字符串形式的数字也能解析（"0.1" / "3"）。</summary>
+    /// <summary>Reads a number; numeric strings ("0.1", "3") are accepted.</summary>
     public static double? GetDouble(JsonElement obj, params string[] names)
     {
         if (!TryGet(obj, out var v, names)) return null;
@@ -85,7 +80,7 @@ internal static class JsonHelpers
         }
     }
 
-    /// <summary>取布尔；兼容 "true"/"false" 字符串。</summary>
+    /// <summary>Reads a boolean; "true"/"false" strings are accepted.</summary>
     public static bool? GetBool(JsonElement obj, params string[] names)
     {
         if (!TryGet(obj, out var v, names)) return null;
@@ -107,8 +102,8 @@ internal static class JsonHelpers
     }
 
     /// <summary>
-    /// 把一个「可能是数组、可能是单值、可能是 null」的字段读成 JsonElement 列表。
-    /// 例：RequiredTool 多数写成字符串 ""，个别 mod 写成数组。
+    /// Reads a field that may be an array, a single value or null into a list.
+    /// RequiredTool is usually a bare string and occasionally an array.
     /// </summary>
     public static IReadOnlyList<JsonElement> GetArrayLike(JsonElement obj, params string[] names)
     {
