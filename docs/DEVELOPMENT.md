@@ -3,7 +3,7 @@
 > Language: English only - code comments, `docs/` and CHANGELOG.
 > Player-facing guide: [../README.md](../README.md). Maintainer reading order: this file, then the bug notes.
 
-Version 1.6.0 · target game 2.55 · .NET 8 (`net8.0-windows`, WinForms) · no third-party dependencies.
+Version 1.7.0 · target game 2.55 · .NET 8 (`net8.0-windows`, WinForms) · no third-party dependencies.
 
 Companion docs: [BUG-001-detail-switch.md](BUG-001-detail-switch.md) - why the shared detail panel used to keep
 showing another tab's row; [BUG-002-unsaved-prompt.md](BUG-002-unsaved-prompt.md) - why untouched CRLF entries
@@ -64,7 +64,9 @@ TLD_ModBlueprintFinder/                 repository root
     ├── Export/CsvExporter.cs           UTF-8 CSV with BOM
     ├── Editing/ModBackup.cs            whole-container copies into TLDMBF_modcomponent_backup\
     ├── Editing/ModComponentArchive.cs  entry CRUD (ZIP rewrite core + folder branch)
-    └── Ui/                             MainForm.Ui.cs (controls), MainForm.cs (logic), ContainerEditorForm.cs
+    └── Ui/                             MainForm.Ui.cs (controls), MainForm.cs (logic),
+                                        ContainerEditorForm.cs, Theme.cs (palettes, §8.1),
+                                        ThemedTabControl.cs (native tab chrome overpaint, §8.1)
 ```
 
 Layering rule: the UI makes **no** business decisions. Whether a row matched and why is decided in
@@ -419,9 +421,70 @@ edited the moment they load. Both editors therefore set `_original` / `EditSessi
 | `IncludeSubFolders` | `true` | also look for containers in subfolders of `Mods` |
 | `MatchModeIndex` | `0` | combo-box index: 0 auto, 1 exact, 2 fuzzy |
 | `AutoBackup` | `true` | back up before every write |
+| `DarkMode` | `false` | dark colour scheme; same as the night-mode checkbox in the path row |
 
 A failed save is swallowed on purpose: a tool that forgets the path is less annoying than a modal dialog on
 every launch out of a read-only folder.
+
+### 8.1 Two colour schemes
+
+`Ui/Theme.cs` holds two `Palette` instances plus the code that pushes one into a live window. Light is the
+original look value for value; dark is the night variant. Nothing else in the UI knows a scheme exists:
+controls read `Theme.Current` where they used to write a literal, and `Theme.Apply(form)` re-assigns every
+colour WinForms would otherwise keep after the first paint.
+
+Four things are not expressible as a palette entry, and each one needed its own mechanism:
+
+| Where | Why a colour is not enough | What is done instead |
+| --- | --- | --- |
+| Title bar | drawn by DWM, not by the window | `DwmSetWindowAttribute(DWMWA_USE_IMMERSIVE_DARK_MODE)`: attribute 20, 19 as fallback |
+| Scroll bars | painted from the control's window theme | `SetWindowTheme(hwnd, "DarkMode_Explorer", null)`, reset to `null` for light |
+| Tab strip | drawn by the system; `BackColor` never reaches it | owner-draw, plus `TabAppearance.FlatButtons` because Normal paints a white etched page border; the parts owner-draw cannot reach are overpainted, see below |
+| Column headers | the header above the current cell takes the row *selection* colour | `ColumnHeadersDefaultCellStyle.SelectionBackColor` set to the header colour |
+
+#### The tab frame that no colour reaches
+
+Owner-draw covers the tab rectangles and nothing else. Three surfaces around them are painted by the native
+tab control with `SystemColors.Control` (`240,240,240`) no matter what `BackColor`, `Appearance` or the
+window theme say, and they showed up as a light outline around the whole result area:
+
+| Surface | Size in the capture | Painted by |
+| --- | --- | --- |
+| frame around the page area | 4 px left / right / bottom, 2 px top | native page frame |
+| empty strip right of the last tab | rest of the row | native strip filler |
+| frame of every tab | 2 px | native tab frame, drawn *after* `WM_DRAWITEM` |
+
+`ThemedTabControl.WndProc` therefore paints after `base.WndProc` on `WM_PAINT`, on a device context from
+`GetDC` (the update region is already validated at that point, `BeginPaint` would clip the overpaint away):
+the whole strip goes to `Palette.Window`, every tab is redrawn through `Theme.PaintTab`, and the page frame
+goes to `Palette.Surface` so it merges with the page. The method returns immediately when `Theme.IsDark` is
+false - light keeps the native drawing and is byte-identical to the pre-theming build (measured: 0 differing
+pixels; the dark capture differs only inside the tab control's own rectangle, 16378 px).
+
+Two alternatives were measured and rejected:
+
+- `SetWindowTheme(hwnd, "", "")` removes the page frame but leaves the strip filler light, and the tabs fall
+  back to a 3D outline.
+- `Multiline = true` removes the native scroll arrows, but an owner-drawn multiline strip silently drops its
+  last tab (comctl32 reports no rect for it), so a narrow window would hide a page.
+
+Known leftover: when the strip overflows, comctl32 puts an `msctls_updown32` scroll pair in the corner of the
+row. That is a **child window**, so it paints after the parent and cannot be overpainted; it stays system grey
+(332 px measured at an 800 px strip). Hiding it would make the overflowing tabs unreachable, and neither
+`SetWindowTheme(updown, "", "")` nor `DarkMode_Explorer` darkens it.
+
+Restoration rule: light has to come back identical to the build before theming existed. Every dark-only
+tweak therefore has a light branch in the same method rather than a separate reset pass - flat buttons go
+back to `UseVisualStyleBackColor`, the detail box goes back to `Fixed3D`, header separators go back to
+`Raised`, tabs go back to `Appearance.Normal`.
+
+The button trap is worth spelling out: a `Button` with `UseVisualStyleBackColor = true` ignores `BackColor`
+entirely, so the dark branch has to clear the flag before assigning a colour, and the light branch has to set
+it again or the button keeps the flat square look.
+
+`StatusTone` exists for the same reason as the palette: call sites say *what* the status line means (`Ok`,
+`Warn`, `Error`, `Muted`), the palette decides what that looks like, and the last tone is remembered so a
+scheme switch recolours the current message instead of leaving the previous scheme's colour on screen.
 
 ## 9. Diagnostics: CLI and exit codes
 
@@ -475,6 +538,8 @@ The console code page can be GBK, and a WinExe has no console handle at all, whi
 | 16 | Vanilla rows are read-only: `IsVanilla` gates the edit buttons on top of the empty container path | the game's own recipes look editable, and the only possible write target is a mod's file | §2.5 |
 | 17 | Vanilla is loaded even when the path holds no modcomponent | a wrong path silently hides data that does not depend on the path | §2.5 |
 | 18 | Vanilla never shares a dedup key with a mod row, and sorts after it | the override relationship, the one thing the row is for, disappears | §5 |
+| 19 | The strip and page frame are repainted after `WM_PAINT`, before any layout change is considered | a light frame stays around the results in the dark scheme, which is the one thing the night mode is for | §8.1 |
+| 20 | Overpaint returns before painting when the scheme is light | the light look stops being the original look | §8.1 |
 
 ## 11. Comment migration map
 
@@ -561,6 +626,7 @@ What has actually been checked, and how far:
 | Search | Baselines below, reproduced on 2.55 |
 | Vanilla export | `tools/export_vanilla.py`: 533 bundles / 1431 CABs indexed in ~51 s, 104 blueprints + 29 recipes, 0 failures, 60 KB zip; row values cross-checked against the crafting screen (broth 1.0 kg meat + 1.5 L water) |
 | Vanilla read-only | GUI probe on a vanilla-only hit (`OBJ_Rustic_Stool_Prefab`): the edit / save / back-up buttons all report disabled and the detail panel starts with the read-only notice; the same probe on a mod hit (`GEAR_Hammer`) has edit and back-up enabled |
+| Colour schemes | GUI probe: ticking the night-mode checkbox repaints the main window and writes `"DarkMode": true`; a relaunch comes up dark (title bar attribute reads 1); unticking restores light, and the result diffs against a fresh light start in text antialiasing only - no control keeps a dark colour. Container editor captured in dark: list header, editor pane and buttons all follow |
 | Write path | Console stub over real container copies: 38 cases (create / update / rename / delete / binary / path validation / folder containers) |
 | Container editor | End-to-end in a sandbox copy: create -> edit -> rename -> delete, archive re-read and `testzip()` after each step |
 | Single-file publish | CLI and GUI smoke test from `dist\`, including the embedded vanilla zip |

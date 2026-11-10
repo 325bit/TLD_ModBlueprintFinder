@@ -50,6 +50,7 @@ public sealed class ContainerEditorForm : Form
     private bool _dirty;
     private bool _suppress;
     private int _lastContainerIndex;
+    private StatusTone _lastTone = StatusTone.Default;
 
     public ContainerEditorForm(
         IReadOnlyList<ContainerSummary> containers,
@@ -142,7 +143,7 @@ public sealed class ContainerEditorForm : Form
 
         _lblCount.AutoSize = true;
         _lblCount.Margin = new Padding(0, S(8), 0, 0);
-        _lblCount.ForeColor = Color.DimGray;
+        _lblCount.ForeColor = Theme.Current.TextMuted;
 
         row2.Controls.Add(MakeLabel("过滤"), 0, 0);
         row2.Controls.Add(_txtFilter, 1, 0);
@@ -179,7 +180,7 @@ public sealed class ContainerEditorForm : Form
         _lblCurrent.Padding = new Padding(S(6), S(4), S(6), 0);
         _lblCurrent.Text = "未选中条目";
         _lblCurrent.AutoEllipsis = true;
-        _lblCurrent.ForeColor = Color.FromArgb(60, 60, 60);
+        _lblCurrent.ForeColor = Theme.Current.Text;
 
         _editor.Dock = DockStyle.Fill;
         _editor.Font = new Font("Consolas", 9F, FontStyle.Regular, GraphicsUnit.Point);
@@ -189,7 +190,7 @@ public sealed class ContainerEditorForm : Form
         _editor.BorderStyle = BorderStyle.None;
         _editor.AcceptsTab = true;
         _editor.ReadOnly = true;
-        _editor.BackColor = Color.FromArgb(246, 246, 246);
+        ApplyEditorSurface();
         _editor.TextChanged += OnEditorTextChanged;
         _editor.KeyDown += OnEditorKeyDown;
 
@@ -273,6 +274,8 @@ public sealed class ContainerEditorForm : Form
 
     private void OnFormLoad(object? sender, EventArgs e)
     {
+        ApplyTheme();
+
         // Column widths and splitter positions are not covered by AutoScaleMode.Dpi; set them after the handle exists
         try
         {
@@ -316,7 +319,7 @@ public sealed class ContainerEditorForm : Form
     {
         if (_containers.Count == 0)
         {
-            SetStatus("没有可编辑的 modcomponent，请先在主窗口点「扫描 Mods」。", Color.Firebrick);
+            SetStatus("没有可编辑的 modcomponent，请先在主窗口点「扫描 Mods」。", StatusTone.Error);
             UpdateButtons();
             return;
         }
@@ -380,7 +383,7 @@ public sealed class ContainerEditorForm : Form
         {
             _entries = new List<ArchiveEntry>();
             RefreshList();
-            SetStatus("读取失败：" + ex.Message, Color.Firebrick);
+            SetStatus("读取失败：" + ex.Message, StatusTone.Error);
             MessageBox.Show(this, $"打不开这个 modcomponent：\n\n{ex.Message}", "读取失败",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
@@ -391,12 +394,12 @@ public sealed class ContainerEditorForm : Form
         var target = selectPath ?? _entries.FirstOrDefault(e => e.IsJson)?.Path;
         if (target is null || !SelectPath(target, reload: true))
         {
-            SetStatus($"{container.Name}：里面没有 .json 文件。", Color.DarkOrange);
+            SetStatus($"{container.Name}：里面没有 .json 文件。", StatusTone.Warn);
             return;
         }
 
         var total = _entries.Count(e => !e.IsDirectory);
-        SetStatus($"{container.Name}：{total} 个文件，{_entries.Count(e => e.IsJson)} 个 .json。", Color.ForestGreen);
+        SetStatus($"{container.Name}：{total} 个文件，{_entries.Count(e => e.IsJson)} 个 .json。", StatusTone.Ok);
     }
 
     private void RefreshList()
@@ -524,7 +527,7 @@ public sealed class ContainerEditorForm : Form
         }
         catch (Exception ex)
         {
-            SetStatus("读取条目失败：" + ex.Message, Color.Firebrick);
+            SetStatus("读取条目失败：" + ex.Message, StatusTone.Error);
             return;
         }
 
@@ -554,7 +557,7 @@ public sealed class ContainerEditorForm : Form
                 _editor.ScrollToCaret();
             }
 
-            _editor.BackColor = _editor.ReadOnly ? Color.FromArgb(246, 246, 246) : Color.White;
+            ApplyEditorSurface();
 
             // The baseline must be what the editor actually holds, not the file text: RichTextBox returns
             // LF for every line break, so a CRLF file would look edited the moment it is loaded.
@@ -580,7 +583,7 @@ public sealed class ContainerEditorForm : Form
         {
             _editor.Text = "";
             _editor.ReadOnly = true;
-            _editor.BackColor = Color.FromArgb(246, 246, 246);
+            ApplyEditorSurface();
         }
         finally
         {
@@ -677,7 +680,7 @@ public sealed class ContainerEditorForm : Form
 
         RefreshList();
         SelectPath(path, reload: true);
-        SetStatus($"已新建 {path}" + (backup is null ? "" : $"，备份：{Path.GetFileName(backup)}"), Color.ForestGreen);
+        SetStatus($"已新建 {path}" + (backup is null ? "" : $"，备份：{Path.GetFileName(backup)}"), StatusTone.Ok);
     }
 
     /// <summary>Default path for a new file: prefer a folder the container already has, not an invented structure.</summary>
@@ -774,7 +777,7 @@ public sealed class ContainerEditorForm : Form
 
         if (text == _original)
         {
-            SetStatus("内容没有变化，未写入。", Color.DimGray);
+            SetStatus("内容没有变化，未写入。", StatusTone.Muted);
             return true;
         }
 
@@ -809,7 +812,7 @@ public sealed class ContainerEditorForm : Form
         SelectPath(path, reload: false);
         UpdateDirty();
 
-        SetStatus($"已写入 {path}" + (backup is null ? "" : $"，备份：{Path.GetFileName(backup)}"), Color.ForestGreen);
+        SetStatus($"已写入 {path}" + (backup is null ? "" : $"，备份：{Path.GetFileName(backup)}"), StatusTone.Ok);
         return true;
     }
 
@@ -826,7 +829,7 @@ public sealed class ContainerEditorForm : Form
         }
 
         LoadEntry(_current);
-        SetStatus($"已从 modcomponent 重新读取 {_current.Path}。", Color.DimGray);
+        SetStatus($"已从 modcomponent 重新读取 {_current.Path}。", StatusTone.Muted);
     }
 
     // Rename / delete
@@ -879,7 +882,7 @@ public sealed class ContainerEditorForm : Form
 
         RefreshList();
         SelectPath(newPath, reload: true);
-        SetStatus($"已重命名：{oldPath} → {newPath}", Color.ForestGreen);
+        SetStatus($"已重命名：{oldPath} → {newPath}", StatusTone.Ok);
     }
 
     private void OnDeleteClick(object? sender, EventArgs e)
@@ -930,7 +933,7 @@ public sealed class ContainerEditorForm : Form
             ClearEditor();
         }
 
-        SetStatus($"已删除 {path}" + (backup is null ? "" : $"，备份：{Path.GetFileName(backup)}"), Color.ForestGreen);
+        SetStatus($"已删除 {path}" + (backup is null ? "" : $"，备份：{Path.GetFileName(backup)}"), StatusTone.Ok);
     }
 
     // Backup / refresh
@@ -943,7 +946,7 @@ public sealed class ContainerEditorForm : Form
         try
         {
             var path = ModBackup.Create(container.Path);
-            SetStatus($"已备份到 {path}", Color.ForestGreen);
+            SetStatus($"已备份到 {path}", StatusTone.Ok);
 
             MessageBox.Show(this, $"已备份：\n\n{path}", "备份完成",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -952,7 +955,7 @@ public sealed class ContainerEditorForm : Form
         {
             MessageBox.Show(this, $"备份失败：\n\n{ex.Message}", "备份失败",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
-            SetStatus("备份失败：" + ex.Message, Color.Firebrick);
+            SetStatus("备份失败：" + ex.Message, StatusTone.Error);
         }
     }
 
@@ -1000,14 +1003,30 @@ public sealed class ContainerEditorForm : Form
         MessageBox.Show(this, $"{title}：\n\n{ex.Message}{extra}", title,
             MessageBoxButtons.OK, MessageBoxIcon.Error);
 
-        SetStatus($"{title}：{ex.Message}", Color.Firebrick);
+        SetStatus($"{title}：{ex.Message}", StatusTone.Error);
     }
 
-    private void SetStatus(string text, Color color)
+    private void SetStatus(string text, StatusTone tone = StatusTone.Default)
     {
+        _lastTone = tone;
         _lblStatus.Text = text;
-        _lblStatus.ForeColor = color;
+        _lblStatus.ForeColor = Theme.Tone(tone);
     }
+
+    /// <summary>
+    /// The editor inherits the scheme chosen in the main window; it has no switch of its own.
+    /// Called from Load because the title bar can only be recoloured once the handle exists.
+    /// </summary>
+    private void ApplyTheme()
+    {
+        Theme.Apply(this);
+        ApplyEditorSurface();
+        _lblStatus.ForeColor = Theme.Tone(_lastTone);
+    }
+
+    /// <summary>Read-only and editable content must not look the same: the colour is the only hint.</summary>
+    private void ApplyEditorSurface() =>
+        _editor.BackColor = _editor.ReadOnly ? Theme.Current.SurfaceReadOnly : Theme.Current.Surface;
 
     private static bool IsValidJson(string text, out string error)
     {

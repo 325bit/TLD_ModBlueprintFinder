@@ -24,6 +24,12 @@ public sealed partial class MainForm : Form
     private CancellationTokenSource? _scanCts;
     private bool _busy;
 
+    /// <summary>Tone of the last status line, so switching the scheme can recolour it without a new message.</summary>
+    private StatusTone _lastTone = StatusTone.Default;
+
+    /// <summary>Set while the theme checkbox is being initialised, so restoring it does not look like a click.</summary>
+    private bool _suppressTheme;
+
     private readonly string? _initialPath;
     private readonly string? _initialItem;
 
@@ -48,15 +54,24 @@ public sealed partial class MainForm : Form
 
     private void OnFormLoad(object? sender, EventArgs e)
     {
+        var settings = LoadSettings();
+
+        // The scheme has to be known before the grids exist: Theme.Apply is what gives them their colours,
+        // and running it after the first paint would flash the old theme.
+        Theme.Mode = settings.DarkMode ? ThemeMode.Dark : ThemeMode.Light;
+
         // Column widths are not scaled by AutoScaleMode.Dpi, so the grids are built after the handle exists
         BuildGrids();
+        ApplyTheme();
+
+        _suppressTheme = true;
+        _chkDark.Checked = Theme.IsDark;
+        _suppressTheme = false;
 
         // Shrink first when the screen is smaller than the window, or the title bar ends up off-screen
         var work = Screen.FromControl(this).WorkingArea;
         if (Height > work.Height) Height = Math.Max(MinimumSize.Height, work.Height - S(40));
         if (Width > work.Width) Width = Math.Max(MinimumSize.Width, work.Width - S(40));
-
-        var settings = LoadSettings();
 
         // Command-line presets win over the remembered path
         var startPath = !string.IsNullOrWhiteSpace(_initialPath) ? _initialPath : settings.LastPath;
@@ -89,13 +104,13 @@ public sealed partial class MainForm : Form
                 SetStatus(detected.Count == 1
                         ? $"已自动定位到 {detected[0]}，正在扫描…"
                         : $"检测到 {detected.Count} 个安装，已选择最近有 Mod 更新的 {detected[0]}，正在扫描…",
-                    detected.Count == 1 ? Color.ForestGreen : Color.DarkOrange);
+                    detected.Count == 1 ? StatusTone.Ok : StatusTone.Warn);
 
                 BeginScan(silent: true);
             }
             else
             {
-                SetStatus("请选择《漫漫长夜》游戏根目录（含 Mods 文件夹），然后点击「扫描 Mods」。", null);
+                SetStatus("请选择《漫漫长夜》游戏根目录（含 Mods 文件夹），然后点击「扫描 Mods」。");
             }
         }
     }
@@ -127,6 +142,45 @@ public sealed partial class MainForm : Form
         _scanCts?.Cancel();
         SaveSettings();
     }
+
+    // Theme
+
+    /// <summary>
+    /// Pushes the active palette into the window. Called on load and on every toggle.
+    /// The detail box is set here rather than inside the walk: its background means "read-only" or
+    /// "editing", which no generic rule over control types can know.
+    /// </summary>
+    private void ApplyTheme()
+    {
+        var palette = Theme.Current;
+
+        Theme.Apply(this);
+        _txtDetail.BackColor = _edit is not null ? palette.SurfaceEditing : palette.Surface;
+
+        // A 3D sunken border is a light 1 px frame: invisible on white, a stray outline on a dark surface.
+        _txtDetail.BorderStyle = Theme.IsDark ? BorderStyle.None : BorderStyle.Fixed3D;
+
+        _lblStatus.ForeColor = Theme.Tone(_lastTone);
+
+        // CellFormatting paints the vanilla tint and the widened-match colours; a repaint re-runs it against
+        // the new palette. Without this the rows keep the old scheme until something scrolls them.
+        foreach (var grid in AllGrids()) grid.Refresh();
+    }
+
+    private void OnThemeToggled(object? sender, EventArgs e)
+    {
+        if (_suppressTheme) return;
+
+        Theme.Mode = _chkDark.Checked ? ThemeMode.Dark : ThemeMode.Light;
+        ApplyTheme();
+        SaveSettings();
+    }
+
+    private DataGridView[] AllGrids() => new[]
+    {
+        _gridProduct, _gridIngredient, _gridTool,
+        _gridRecipeProduct, _gridRecipeIngredient, _gridDefinition
+    };
 
     // Path selection
 
@@ -165,7 +219,7 @@ public sealed partial class MainForm : Form
         SetStatus(found.Count == 1
             ? $"已定位：{found[0]}"
             : $"检测到 {found.Count} 个安装，已选择最近有 Mod 更新的一个：{found[0]}（不对请点「浏览…」更改）",
-            found.Count == 1 ? Color.ForestGreen : Color.DarkOrange);
+            found.Count == 1 ? StatusTone.Ok : StatusTone.Warn);
 
         BeginScan();
     }
@@ -336,21 +390,21 @@ public sealed partial class MainForm : Form
         }
         catch (OperationCanceledException)
         {
-            SetStatus("扫描已取消。", null);
+            SetStatus("扫描已取消。");
         }
         catch (ArgumentException ex)
         {
             // Path-level problems: user-facing errors thrown by ResolveInput
             if (!silent)
                 MessageBox.Show(this, ex.Message, "路径无效", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            SetStatus(ex.Message, Color.Firebrick);
+            SetStatus(ex.Message, StatusTone.Error);
         }
         catch (Exception ex)
         {
             if (!silent)
                 MessageBox.Show(this, $"扫描时发生未预期的错误：\n\n{ex.Message}", "扫描失败",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
-            SetStatus("扫描失败：" + ex.Message, Color.Firebrick);
+            SetStatus("扫描失败：" + ex.Message, StatusTone.Error);
         }
         finally
         {
@@ -389,7 +443,7 @@ public sealed partial class MainForm : Form
         if (report.Records.Count == 0 && report.Definitions.Count == 0)
         {
             _txtDetail.Text = BuildEmptyReport(report);
-            SetStatus("没有解析到任何蓝图或物品定义。", Color.Firebrick);
+            SetStatus("没有解析到任何蓝图或物品定义。", StatusTone.Error);
 
             if (!silent)
             {
@@ -416,7 +470,7 @@ public sealed partial class MainForm : Form
         SetStatus(
             $"扫描完成：{report.Containers.Count} 个容器（失败 {failed}），mod 蓝图 {modRecords} 条{vanillaNote} + " +
             $"{report.Definitions.Count} 份物品定义，耗时 {report.Elapsed.TotalMilliseconds:0} ms。",
-            failed > 0 || report.Errors.Count > 0 ? Color.DarkOrange : Color.ForestGreen);
+            failed > 0 || report.Errors.Count > 0 ? StatusTone.Warn : StatusTone.Ok);
 
         // No container but data exists: the path is probably wrong, which must be said out loud - the results
         // that appear are the embedded vanilla snapshot and would otherwise look like a successful scan.
@@ -527,7 +581,7 @@ public sealed partial class MainForm : Form
             }
 
             _txtDetail.Text = sb.ToString();
-            SetStatus($"「{query}」无匹配。", Color.DarkOrange);
+            SetStatus($"「{query}」无匹配。", StatusTone.Warn);
         }
         else
         {
@@ -548,7 +602,7 @@ public sealed partial class MainForm : Form
                 : "";
 
             SetStatus($"「{query}」共命中配方 {_outcome.TotalHits} 条{defNote}。{splitNote}{note}",
-                inexact > 0 ? Color.DarkOrange : Color.ForestGreen);
+                inexact > 0 ? StatusTone.Warn : StatusTone.Ok);
 
             // Auto-select the detail of the first non-empty group
             if (_outcome.AsProduct.Count > 0) SelectFirstRow(_tabs, _pageProduct, _gridProduct);
@@ -593,14 +647,14 @@ public sealed partial class MainForm : Form
         if (row.IsVanilla &&
             grid.Columns[e.ColumnIndex].Name is nameof(SearchRow.ModSources) or nameof(DefinitionRow.ModName))
         {
-            e.CellStyle.ForeColor = Color.FromArgb(0, 108, 122);
+            e.CellStyle.ForeColor = Theme.Current.VanillaTint;
         }
 
         if (row.Quality == MatchQuality.Exact) return;
 
         e.CellStyle.ForeColor = row.Quality == MatchQuality.Prefix
-            ? Color.FromArgb(181, 96, 6)      // prefix: dark orange
-            : Color.FromArgb(120, 120, 120);  // contains: mid grey
+            ? Theme.Current.PrefixMatch      // widened by prefix: amber
+            : Theme.Current.ContainsMatch;   // widened by substring: grey
 
         // First column is "what this result is called"; italic marks a widened match
         if (e.ColumnIndex == 0 || grid.Columns[e.ColumnIndex].Name == nameof(SearchRow.BlueprintName))
@@ -763,12 +817,12 @@ public sealed partial class MainForm : Form
         {
             case SearchRow row:
                 TryCopy($"{row.BlueprintName} → {row.ResultText}  [{row.LocationText}]  来源 {row.ModSources}");
-                SetStatus("已复制该行摘要到剪贴板。", Color.DimGray);
+                SetStatus("已复制该行摘要到剪贴板。", StatusTone.Muted);
                 break;
 
             case DefinitionRow def:
                 TryCopy($"{def.ItemId}  ←  {def.ModName} :: {def.EntryPath}");
-                SetStatus("已复制该物品定义的来源到剪贴板。", Color.DimGray);
+                SetStatus("已复制该物品定义的来源到剪贴板。", StatusTone.Muted);
                 break;
         }
     }
@@ -782,7 +836,7 @@ public sealed partial class MainForm : Form
         if (string.IsNullOrWhiteSpace(text)) return;
 
         if (TryCopy(text))
-            SetStatus($"已复制 {text.Length} 个字符。", Color.DimGray);
+            SetStatus($"已复制 {text.Length} 个字符。", StatusTone.Muted);
     }
 
     private bool TryCopy(string text)
@@ -850,14 +904,14 @@ public sealed partial class MainForm : Form
 
             if (!editor.AnyChange) return;
 
-            SetStatus("容器内容已改动，正在重新扫描…", Color.DarkOrange);
+            SetStatus("容器内容已改动，正在重新扫描…", StatusTone.Warn);
             BeginScan(silent: true);
         }
         catch (Exception ex)
         {
             MessageBox.Show(this, "打开容器编辑器时出错：\n\n" + ex.Message, "编辑器",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
-            SetStatus("打开容器编辑器失败：" + ex.Message, Color.Firebrick);
+            SetStatus("打开容器编辑器失败：" + ex.Message, StatusTone.Error);
         }
     }
 
@@ -866,20 +920,20 @@ public sealed partial class MainForm : Form
         var row = CurrentRow(ActiveGrid());
         if (row is null || string.IsNullOrEmpty(row.ContainerPath))
         {
-            SetStatus("请先在左侧选中一行，再备份它所属的 modcomponent。", Color.Firebrick);
+            SetStatus("请先在左侧选中一行，再备份它所属的 modcomponent。", StatusTone.Error);
             return;
         }
 
         if (row.IsVanilla)
         {
-            SetStatus("这一行来自游戏原版，没有可以备份的 modcomponent。", Color.Firebrick);
+            SetStatus("这一行来自游戏原版，没有可以备份的 modcomponent。", StatusTone.Error);
             return;
         }
 
         try
         {
             var path = ModBackup.Create(row.ContainerPath);
-            SetStatus($"已备份到 {path}", Color.ForestGreen);
+            SetStatus($"已备份到 {path}", StatusTone.Ok);
 
             MessageBox.Show(this, $"已备份：\n\n{path}", "备份完成",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -888,7 +942,7 @@ public sealed partial class MainForm : Form
         {
             MessageBox.Show(this, $"备份失败：\n\n{ex.Message}", "备份失败",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
-            SetStatus("备份失败：" + ex.Message, Color.Firebrick);
+            SetStatus("备份失败：" + ex.Message, StatusTone.Error);
         }
     }
 
@@ -903,13 +957,13 @@ public sealed partial class MainForm : Form
         var row = CurrentRow(ActiveGrid());
         if (row is null || string.IsNullOrEmpty(row.ContainerPath) || string.IsNullOrEmpty(row.EntryPath))
         {
-            SetStatus("请先在左侧选中一行，再编辑它对应的 JSON。", Color.Firebrick);
+            SetStatus("请先在左侧选中一行，再编辑它对应的 JSON。", StatusTone.Error);
             return;
         }
 
         if (row.IsVanilla)
         {
-            SetStatus("这一行来自游戏原版，只读：要改它只能写一个 mod 覆盖。", Color.Firebrick);
+            SetStatus("这一行来自游戏原版，只读：要改它只能写一个 mod 覆盖。", StatusTone.Error);
             return;
         }
 
@@ -917,7 +971,7 @@ public sealed partial class MainForm : Form
         // "save before switching?", making the switch impossible is far more predictable.
         _tabs.Enabled = false;
         _txtDetail.ReadOnly = false;
-        _txtDetail.BackColor = Color.FromArgb(255, 252, 235);   // pale yellow = editing
+        _txtDetail.BackColor = Theme.Current.SurfaceEditing;
         _txtDetail.Text = row.EditableJson;
         _txtDetail.SelectionStart = 0;
         _txtDetail.ScrollToCaret();
@@ -933,7 +987,7 @@ public sealed partial class MainForm : Form
             ? $"（该行合并了 {sr.Records.Count} 份同名蓝图，改动写入第一份）"
             : "";
 
-        SetStatus($"编辑中：{Path.GetFileName(_edit.ContainerPath)} :: {_edit.EntryPath}{merged}", Color.DarkOrange);
+        SetStatus($"编辑中：{Path.GetFileName(_edit.ContainerPath)} :: {_edit.EntryPath}{merged}", StatusTone.Warn);
     }
 
     private void CancelEdit()
@@ -943,14 +997,14 @@ public sealed partial class MainForm : Form
         _edit = null;
         ExitEditMode();
         ShowDetail(ActiveGrid());
-        SetStatus("已取消编辑，没有写入任何文件。", Color.DimGray);
+        SetStatus("已取消编辑，没有写入任何文件。", StatusTone.Muted);
     }
 
     private void ExitEditMode()
     {
         _tabs.Enabled = true;
         _txtDetail.ReadOnly = true;
-        _txtDetail.BackColor = Color.White;
+        _txtDetail.BackColor = Theme.Current.Surface;
         _btnEdit.Text = "编辑 JSON";
         UpdateEditButtons();
     }
@@ -965,7 +1019,7 @@ public sealed partial class MainForm : Form
         if (text == session.OriginalText)
         {
             CancelEdit();
-            SetStatus("内容没有变化，未写入任何文件。", Color.DimGray);
+            SetStatus("内容没有变化，未写入任何文件。", StatusTone.Muted);
             return;
         }
 
@@ -998,7 +1052,7 @@ public sealed partial class MainForm : Form
             MessageBox.Show(this, "写入失败：\n\n" + ex.Message + extra, "保存修改失败",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
 
-            SetStatus("保存失败：" + ex.Message, Color.Firebrick);
+            SetStatus("保存失败：" + ex.Message, StatusTone.Error);
             return;
         }
 
@@ -1008,7 +1062,7 @@ public sealed partial class MainForm : Form
         SetStatus(backupPath is null
                 ? $"已写入 {session.EntryPath}（未备份）。正在重新扫描…"
                 : $"已写入 {session.EntryPath}，备份：{Path.GetFileName(backupPath)}。正在重新扫描…",
-            Color.ForestGreen);
+            StatusTone.Ok);
 
         // The index must be rebuilt after a write, or the UI shows "saved but nothing changed"
         await ScanAsync(silent: true).ConfigureAwait(true);
@@ -1059,7 +1113,7 @@ public sealed partial class MainForm : Form
         try
         {
             CsvExporter.Save(dialog.FileName, CsvExporter.Build(_outcome));
-            SetStatus($"已导出到 {dialog.FileName}", Color.ForestGreen);
+            SetStatus($"已导出到 {dialog.FileName}", StatusTone.Ok);
         }
         catch (Exception ex)
         {
@@ -1083,10 +1137,11 @@ public sealed partial class MainForm : Form
         UseWaitCursor = busy;
     }
 
-    private void SetStatus(string text, Color? color)
+    private void SetStatus(string text, StatusTone tone = StatusTone.Default)
     {
+        _lastTone = tone;
         _lblStatus.Text = text;
-        _lblStatus.ForeColor = color ?? SystemColors.ControlText;
+        _lblStatus.ForeColor = Theme.Tone(tone);
     }
 
     // Report text
@@ -1196,6 +1251,9 @@ public sealed partial class MainForm : Form
 
         /// <summary>Back up the original before "Save changes". On by default - the only operation that overwrites user files.</summary>
         public bool AutoBackup { get; set; } = true;
+
+        /// <summary>Dark scheme. Remembered so the tool opens in whatever the user left it in.</summary>
+        public bool DarkMode { get; set; }
     }
 
     /// <summary>Settings file name. Prefixed with the tool name so another tool in the same folder cannot collide.</summary>
@@ -1232,7 +1290,8 @@ public sealed partial class MainForm : Form
                 IncludeSubFolders = _chkSubFolders.Checked,
                 MergeDuplicates = _chkMerge.Checked,
                 MatchModeIndex = _cmbMode.SelectedIndex,
-                AutoBackup = _chkAutoBackup.Checked
+                AutoBackup = _chkAutoBackup.Checked,
+                DarkMode = Theme.IsDark
             };
 
             File.WriteAllText(SettingsFile, JsonSerializer.Serialize(settings,

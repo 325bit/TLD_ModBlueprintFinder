@@ -19,9 +19,10 @@ public sealed partial class MainForm
     private readonly ComboBox _cmbMode = new();
     private readonly CheckBox _chkMerge = new();
     private readonly CheckBox _chkSubFolders = new();
+    private readonly CheckBox _chkDark = new();
 
     // Result area
-    private readonly TabControl _tabs = new();
+    private readonly ThemedTabControl _tabs = new();
     private readonly DataGridView _gridProduct = new() { Name = "gridProduct" };
     private readonly DataGridView _gridIngredient = new() { Name = "gridIngredient" };
     private readonly DataGridView _gridTool = new() { Name = "gridTool" };
@@ -95,11 +96,12 @@ public sealed partial class MainForm
         var pathLayout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 6,
+            ColumnCount = 7,
             RowCount = 1
         };
         pathLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, S(64)));
         pathLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        pathLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         pathLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         pathLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         pathLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -129,12 +131,21 @@ public sealed partial class MainForm
         _chkSubFolders.AutoSize = true;
         _chkSubFolders.Margin = new Padding(S(8), S(6), 0, 0);
 
+        // View option next to the scan option: both are checkboxes, and the top row is the only place that
+        // is visible in every state (a menu entry would hide the current mode).
+        _chkDark.Text = "夜间模式";
+        _chkDark.AutoSize = true;
+        _chkDark.Margin = new Padding(S(12), S(6), 0, 0);
+        _chkDark.CheckedChanged += OnThemeToggled;
+        _tips.SetToolTip(_chkDark, "深色配色，夜里看着不刺眼。选择会被记住，下次启动保持。");
+
         pathLayout.Controls.Add(MakeLabel("游戏路径"), 0, 0);
         pathLayout.Controls.Add(_txtPath, 1, 0);
         pathLayout.Controls.Add(_btnBrowse, 2, 0);
         pathLayout.Controls.Add(_btnDetect, 3, 0);
         pathLayout.Controls.Add(_btnScan, 4, 0);
         pathLayout.Controls.Add(_chkSubFolders, 5, 0);
+        pathLayout.Controls.Add(_chkDark, 6, 0);
 
         gbPath.Controls.Add(pathLayout);
 
@@ -308,7 +319,7 @@ public sealed partial class MainForm
 
         _txtDetail.Dock = DockStyle.Fill;
         _txtDetail.ReadOnly = true;
-        _txtDetail.BackColor = Color.White;
+        _txtDetail.BackColor = Theme.Current.Surface;
         _txtDetail.Font = new Font("Consolas", 9F, FontStyle.Regular, GraphicsUnit.Point);
         _txtDetail.WordWrap = false;
         _txtDetail.ScrollBars = RichTextBoxScrollBars.Both;
@@ -432,21 +443,17 @@ public sealed partial class MainForm
         grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         grid.MultiSelect = true;
         grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
-        grid.BackgroundColor = Color.White;
         grid.BorderStyle = BorderStyle.None;
         grid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
-        grid.GridColor = Color.FromArgb(230, 230, 230);
+        // Every colour below comes from Theme.Apply, which runs right after BuildGrids: one place decides
+        // how a grid looks in both schemes. Visual styles must be off or the header ignores that.
         grid.EnableHeadersVisualStyles = false;
         grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-        grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(245, 246, 248);
         grid.ColumnHeadersDefaultCellStyle.Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold);
         grid.ColumnHeadersDefaultCellStyle.Padding = new Padding(S(4), S(3), S(4), S(3));
         // Headers never wrap: with narrow columns an ellipsis beats a two-line header that inflates the row
         grid.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.False;
         grid.DefaultCellStyle.Padding = new Padding(S(4), S(2), S(4), S(2));
-        grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(250, 250, 252);
-        grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(0, 120, 215);
-        grid.DefaultCellStyle.SelectionForeColor = Color.White;
         grid.RowTemplate.Height = S(24);
 
         grid.Columns.Clear();
