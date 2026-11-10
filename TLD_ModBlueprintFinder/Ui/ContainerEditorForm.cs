@@ -25,14 +25,14 @@ public sealed class ContainerEditorForm : Form
     // Controls
     private readonly ComboBox _cmbContainer = new();
     private readonly TextBox _txtFilter = new();
-    private readonly CheckBox _chkJsonOnly = new();
+    private readonly ThemedCheckBox _chkJsonOnly = new();
     private readonly Label _lblCount = new();
     private readonly SplitContainer _split = new();
     private readonly ListView _list = new();
     private readonly RichTextBox _editor = new();
     private readonly Label _lblCurrent = new();
     private readonly Button _btnBackup = new();
-    private readonly CheckBox _chkAutoBackup = new();
+    private readonly ThemedCheckBox _chkAutoBackup = new();
     private readonly Button _btnReload = new();
     private readonly Button _btnNew = new();
     private readonly Button _btnRename = new();

@@ -16,10 +16,10 @@ public sealed partial class MainForm
     private readonly Button _btnDetect = new();
     private readonly Button _btnScan = new();
     private readonly Button _btnSearch = new();
-    private readonly ComboBox _cmbMode = new();
-    private readonly CheckBox _chkMerge = new();
-    private readonly CheckBox _chkSubFolders = new();
-    private readonly CheckBox _chkDark = new();
+    private readonly ThemedComboBox _cmbMode = new();
+    private readonly ThemedCheckBox _chkMerge = new();
+    private readonly ThemedCheckBox _chkSubFolders = new();
+    private readonly ThemedCheckBox _chkDark = new();
 
     // Result area
     private readonly ThemedTabControl _tabs = new();
@@ -51,7 +51,7 @@ public sealed partial class MainForm
     private readonly Button _btnSaveEdit = new();
     private readonly Button _btnOpenEditor = new();
     private readonly Button _btnBackup = new();
-    private readonly CheckBox _chkAutoBackup = new();
+    private readonly ThemedCheckBox _chkAutoBackup = new();
     private readonly ToolTip _tips = new();
 
     /// <summary>

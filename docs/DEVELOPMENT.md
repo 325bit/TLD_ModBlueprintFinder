@@ -66,7 +66,8 @@ TLD_ModBlueprintFinder/                 repository root
     ├── Editing/ModComponentArchive.cs  entry CRUD (ZIP rewrite core + folder branch)
     └── Ui/                             MainForm.Ui.cs (controls), MainForm.cs (logic),
                                         ContainerEditorForm.cs, Theme.cs (palettes, §8.1),
-                                        ThemedTabControl.cs (native tab chrome overpaint, §8.1)
+                                        ThemedTabControl.cs / ThemedComboBox.cs / ThemedCheckBox.cs
+                                        (native chrome that ignores colours, §8.1)
 ```
 
 Layering rule: the UI makes **no** business decisions. Whether a row matched and why is decided in
@@ -438,9 +439,27 @@ Four things are not expressible as a palette entry, and each one needed its own 
 | Where | Why a colour is not enough | What is done instead |
 | --- | --- | --- |
 | Title bar | drawn by DWM, not by the window | `DwmSetWindowAttribute(DWMWA_USE_IMMERSIVE_DARK_MODE)`: attribute 20, 19 as fallback |
-| Scroll bars | painted from the control's window theme | `SetWindowTheme(hwnd, "DarkMode_Explorer", null)`, reset to `null` for light |
 | Tab strip | drawn by the system; `BackColor` never reaches it | owner-draw, plus `TabAppearance.FlatButtons` because Normal paints a white etched page border; the parts owner-draw cannot reach are overpainted, see below |
+| DropDownList field | the field and its button come from the window theme; `BackColor` and `DrawMode` only reach the list | `ThemedComboBox` overpaints field, button and chevron after `WM_PAINT`; the list itself is owner-drawn |
+| Check box glyph | the box is a themed glyph, only the text follows `ForeColor` | `ThemedCheckBox.OnPaint` covers the glyph and draws box plus tick |
+| Text box border | `Fixed3D` paints its top/left edge white | `BorderStyle.FixedSingle` in dark, `Fixed3D` again in light |
 | Column headers | the header above the current cell takes the row *selection* colour | `ColumnHeadersDefaultCellStyle.SelectionBackColor` set to the header colour |
+| Scroll bars | painted from the process-wide colour mode, not per control | `SetWindowTheme(hwnd, "DarkMode_Explorer", null)` on every scrollable control, `null` for light - see the caveat below |
+
+#### Scroll bars stay light, and that is not fixable here
+
+Three routes were measured on Windows 11 24H2 and none of them darkens the bars:
+
+| Attempt | Result |
+| --- | --- |
+| `SetWindowTheme(hwnd, "DarkMode_Explorer", null)` as the app does it, and again from outside the process | no change for DataGridView, RichEdit or ListView |
+| `SetWindowTheme(hwnd, "DarkMode_Explorer", "ScrollBar")`, sub-id targeted | no change |
+| `SetPreferredAppMode(ForceDark)` + `FlushMenuThemes` (uxtheme exports 135/136), at form load | no change |
+
+So `DataGridView`, the detail `RichTextBox` and the container editor's `ListView` keep a light scroll bar and
+a light scroll-bar corner in the dark scheme. The call is still made, and deferred to `HandleCreated` when the
+handle does not exist yet, because the same call is what darkens the `ListView` header. Treat the bars as a
+known native limitation rather than a regression: any change here has to be re-measured, not assumed.
 
 #### The tab frame that no colour reaches
 

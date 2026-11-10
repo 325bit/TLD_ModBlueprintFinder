@@ -207,12 +207,12 @@ internal static class Theme
             case TextBox text:
                 text.BackColor = palette.Surface;
                 text.ForeColor = palette.Text;
+                // Fixed3D draws its top/left edge in white, which turns a dark field into a bright rectangle.
+                text.BorderStyle = IsDark ? BorderStyle.FixedSingle : BorderStyle.Fixed3D;
                 break;
 
             case ComboBox combo:
-                combo.BackColor = palette.Surface;
-                combo.ForeColor = palette.Text;
-                combo.FlatStyle = IsDark ? FlatStyle.Flat : FlatStyle.Standard;
+                StyleCombo(combo, palette);
                 break;
 
             case Button button:
@@ -316,6 +316,44 @@ internal static class Theme
     private static void OnDrawTab(object? sender, DrawItemEventArgs e)
     {
         if (sender is TabControl tabs) PaintTab(tabs, e.Graphics, e.Index);
+    }
+
+    /// <summary>
+    /// Owner-draw only reaches the list of a DropDownList combo, never its field - that one is painted by
+    /// <see cref="ThemedComboBox"/>. Both read their colours from here so the two halves cannot disagree.
+    /// </summary>
+    private static void StyleCombo(ComboBox combo, Palette palette)
+    {
+        // BackColor reaches the drop-down list's own background; the field ignores it.
+        combo.BackColor = palette.Surface;
+        combo.ForeColor = palette.Text;
+        combo.FlatStyle = FlatStyle.Standard;
+
+        if (combo.DroppedDown) combo.DroppedDown = false;
+
+        combo.DrawItem -= OnDrawComboItem;
+        combo.DrawMode = IsDark ? DrawMode.OwnerDrawFixed : DrawMode.Normal;
+        if (IsDark) combo.DrawItem += OnDrawComboItem;
+
+        // The native field and the overpaint have to swap over, and neither assignment above repaints it.
+        combo.Invalidate();
+    }
+
+    private static void OnDrawComboItem(object? sender, DrawItemEventArgs e)
+    {
+        if (sender is not ComboBox combo || e.Index < 0) return;
+
+        var palette = Current;
+        var selected = (e.State & DrawItemState.Selected) != 0 &&
+                       (e.State & DrawItemState.ComboBoxEdit) == 0;
+
+        using (var back = new SolidBrush(selected ? palette.Selection : palette.Surface))
+            e.Graphics.FillRectangle(back, e.Bounds);
+
+        var text = combo.Items[e.Index]?.ToString() ?? string.Empty;
+        TextRenderer.DrawText(e.Graphics, text, combo.Font, e.Bounds, selected ? palette.SelectionText : palette.Text,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis |
+            TextFormatFlags.NoPrefix);
     }
 
     /// <summary>
@@ -435,12 +473,22 @@ internal static class Theme
     private static extern int SetWindowTheme(IntPtr hWnd, string? subAppName, string? subIdList);
 
     /// <summary>
-    /// Scroll bars are painted by the control's window theme, not by WinForms, so they stay light on a dark
-    /// surface until the window is told to use Explorer's dark variant.
+    /// Scroll bars are painted by the control's window theme, not by WinForms. On the builds this was tested
+    /// on the call changes nothing for DataGridView or RichEdit - those draw their scroll bars from the
+    /// process-wide colour mode, which an app can only change through an undocumented uxtheme export, so the
+    /// scroll bars stay light. Kept because it does work for the controls that honour it, and it is a no-op
+    /// otherwise.
     /// </summary>
     private static void UseDarkScrollBars(Control control)
     {
-        if (!control.IsHandleCreated) return;
+        if (!control.IsHandleCreated)
+        {
+            // Docked children inside a SplitContainer often get their handle only when the form is shown,
+            // and a theme set on a missing handle is silently lost.
+            control.HandleCreated -= OnHandleCreatedForTheme;
+            control.HandleCreated += OnHandleCreatedForTheme;
+            return;
+        }
 
         try
         {
@@ -452,5 +500,16 @@ internal static class Theme
         catch (EntryPointNotFoundException)
         {
         }
+    }
+
+    private static void OnHandleCreatedForTheme(object? sender, EventArgs e)
+    {
+        if (sender is not Control control) return;
+
+        control.HandleCreated -= OnHandleCreatedForTheme;
+        UseDarkScrollBars(control);
+
+        // The window theme repaints the scroll bars but not the surface around them.
+        control.Invalidate();
     }
 }
