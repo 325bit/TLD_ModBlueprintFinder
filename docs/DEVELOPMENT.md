@@ -444,22 +444,32 @@ Four things are not expressible as a palette entry, and each one needed its own 
 | Check box glyph | the box is a themed glyph, only the text follows `ForeColor` | `ThemedCheckBox.OnPaint` covers the glyph and draws box plus tick |
 | Text box border | `Fixed3D` paints its top/left edge white | `BorderStyle.FixedSingle` in dark, `Fixed3D` again in light |
 | Column headers | the header above the current cell takes the row *selection* colour | `ColumnHeadersDefaultCellStyle.SelectionBackColor` set to the header colour |
-| Scroll bars | painted from the process-wide colour mode, not per control | `SetWindowTheme(hwnd, "DarkMode_Explorer", null)` on every scrollable control, `null` for light - see the caveat below |
+| List view header | `SysHeader32` child window; no property reaches it and `BackColor` stops at the rows | `OwnerDraw` plus `DrawColumnHeader`, with rows handed back through `DrawDefault` so selection and focus stay native |
+| Scroll bars | the theme lives on the window handle, so it is lost whenever the handle is recreated | `SetWindowTheme(hwnd, "DarkMode_Explorer", null)` on every scrollable control, `null` for light - re-armed on **every** `HandleCreated`, see below |
 
-#### Scroll bars stay light, and that is not fixable here
+#### Scroll bars: the theme lives on the handle
 
-Three routes were measured on Windows 11 24H2 and none of them darkens the bars:
+A window theme is a property of the HWND, not of the control. The first version of `UseDarkScrollBars` armed
+`HandleCreated` only until the handle appeared and then unsubscribed itself, which meant that any later
+handle recreation dropped the theme for the rest of the session - and WinForms does recreate the detail
+`RichTextBox`'s handle after `Theme.Apply` has run. The `ListView` in the container editor kept its handle and
+stayed dark, which made the symptom look like a per-control limitation of RichEdit rather than a lost theme.
+It is not: a bare `RichTextBox` in a scratch window goes dark on the same single call, and once the
+subscription stays in place the real app does too.
 
-| Attempt | Result |
+| Measurement | Gutter colour at the detail box |
 | --- | --- |
-| `SetWindowTheme(hwnd, "DarkMode_Explorer", null)` as the app does it, and again from outside the process | no change for DataGridView, RichEdit or ListView |
-| `SetWindowTheme(hwnd, "DarkMode_Explorer", "ScrollBar")`, sub-id targeted | no change |
-| `SetPreferredAppMode(ForceDark)` + `FlushMenuThemes` (uxtheme exports 135/136), at form load | no change |
+| before | `205,205,205` - the native light bar |
+| after re-arming the theme on every handle | `77,77,77` thumb on `23,23,23` track - the `DarkMode_Explorer` bar |
 
-So `DataGridView`, the detail `RichTextBox` and the container editor's `ListView` keep a light scroll bar and
-a light scroll-bar corner in the dark scheme. The call is still made, and deferred to `HandleCreated` when the
-handle does not exist yet, because the same call is what darkens the `ListView` header. Treat the bars as a
-known native limitation rather than a regression: any change here has to be re-measured, not assumed.
+Three earlier attempts were recorded here as "no change", and all three were measured while the theme was
+being lost this way; only the third one (the undocumented `SetPreferredAppMode` / `FlushMenuThemes` exports)
+is a genuine no-op, and none of them is needed.
+
+How this is measured matters as much as the fix: the desktop is in use while the tool is being worked on, so
+a screen grab photographs whatever window happens to be on top. `BitBlt(SRCCOPY)` from `GetWindowDC(hwnd)`
+reads the window's own redirection surface instead, non-client area included, and agrees with the screen
+only when nothing covers the window.
 
 #### The tab frame that no colour reaches
 
@@ -498,8 +508,11 @@ back to `UseVisualStyleBackColor`, the detail box goes back to `Fixed3D`, header
 `Raised`, tabs go back to `Appearance.Normal`.
 
 The button trap is worth spelling out: a `Button` with `UseVisualStyleBackColor = true` ignores `BackColor`
-entirely, so the dark branch has to clear the flag before assigning a colour, and the light branch has to set
-it again or the button keeps the flat square look.
+entirely, so the dark branch has to clear the flag before assigning a colour. The light branch has to do the
+opposite order - `BackColor` first, the flag last - because assigning `BackColor` switches the flag off
+again: with the assignments the other way round a button that has been through dark comes back with the
+classic 3D face instead of the visual-style one (measured: 5044 differing pixels in the button rows, 4224
+after the reorder, which is what the pre-existing build showed as well).
 
 `StatusTone` exists for the same reason as the palette: call sites say *what* the status line means (`Ok`,
 `Warn`, `Error`, `Muted`), the palette decides what that looks like, and the last tone is remembered so a
@@ -559,6 +572,7 @@ The console code page can be GBK, and a WinExe has no console handle at all, whi
 | 18 | Vanilla never shares a dedup key with a mod row, and sorts after it | the override relationship, the one thing the row is for, disappears | §5 |
 | 19 | The strip and page frame are repainted after `WM_PAINT`, before any layout change is considered | a light frame stays around the results in the dark scheme, which is the one thing the night mode is for | §8.1 |
 | 20 | Overpaint returns before painting when the scheme is light | the light look stops being the original look | §8.1 |
+| 21 | A window theme is re-applied on every `HandleCreated` and the subscription is never removed | a recreated handle silently brings back a light scroll bar for the rest of the session | §8.1 |
 
 ## 11. Comment migration map
 

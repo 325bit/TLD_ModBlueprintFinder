@@ -194,6 +194,7 @@ internal static class Theme
             case ListView list:
                 list.BackColor = palette.Surface;
                 list.ForeColor = palette.Text;
+                StyleList(list, palette);
                 UseDarkScrollBars(list);
                 break;
 
@@ -274,9 +275,11 @@ internal static class Theme
     {
         if (!IsDark)
         {
+            // Order matters: assigning BackColor switches UseVisualStyleBackColor off again, so the flag
+            // has to come last or the button keeps the classic 3D face after a round trip through dark.
             button.FlatStyle = FlatStyle.Standard;
-            button.UseVisualStyleBackColor = true;
             button.BackColor = SystemColors.Control;
+            button.UseVisualStyleBackColor = true;
             button.ForeColor = SystemColors.ControlText;
             return;
         }
@@ -289,6 +292,58 @@ internal static class Theme
         button.FlatAppearance.MouseOverBackColor = palette.Header;
         button.FlatAppearance.MouseDownBackColor = palette.Border;
     }
+
+    /// <summary>
+    /// The column header of a detailed ListView is a native SysHeader32 child window, and it keeps its
+    /// light fill whatever colour the list itself is given - there is no property for it. Owner drawing is
+    /// the only way to reach it: the header is painted here, and items are handed straight back to the
+    /// native renderer, so rows keep the system selection and focus drawing.
+    /// </summary>
+    private static void StyleList(ListView list, Palette palette)
+    {
+        list.DrawColumnHeader -= OnDrawColumnHeader;
+        list.DrawItem -= OnDrawListRow;
+        list.DrawSubItem -= OnDrawListSubItem;
+
+        // Owner drawing also takes the rows away from the control; it is only worth paying for the header.
+        if (!IsDark)
+        {
+            list.OwnerDraw = false;
+            return;
+        }
+
+        list.OwnerDraw = true;
+        list.DrawColumnHeader += OnDrawColumnHeader;
+        list.DrawItem += OnDrawListRow;
+        list.DrawSubItem += OnDrawListSubItem;
+    }
+
+    private static void OnDrawColumnHeader(object? sender, DrawListViewColumnHeaderEventArgs e)
+    {
+        var palette = Current;
+
+        using (var back = new SolidBrush(palette.Header))
+            e.Graphics.FillRectangle(back, e.Bounds);
+
+        // A single pixel of border on the right and the bottom, the same as the grid headers the main
+        // window shows, so the two headers read as the same control.
+        using (var line = new Pen(palette.Border))
+        {
+            e.Graphics.DrawLine(line, e.Bounds.Right - 1, e.Bounds.Top + 5,
+                e.Bounds.Right - 1, e.Bounds.Bottom - 5);
+            e.Graphics.DrawLine(line, e.Bounds.Left, e.Bounds.Bottom - 1,
+                e.Bounds.Right, e.Bounds.Bottom - 1);
+        }
+
+        var text = e.Header?.Text ?? string.Empty;
+        TextRenderer.DrawText(e.Graphics, text, e.Font, Rectangle.Inflate(e.Bounds, -6, 0), palette.Text,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis |
+            TextFormatFlags.NoPrefix);
+    }
+
+    private static void OnDrawListSubItem(object? sender, DrawListViewSubItemEventArgs e) => e.DrawDefault = true;
+
+    private static void OnDrawListRow(object? sender, DrawListViewItemEventArgs e) => e.DrawDefault = true;
 
     /// <summary>
     /// The tab strip is drawn by the system, so the dark scheme takes it over. Light keeps the native
@@ -481,15 +536,31 @@ internal static class Theme
     /// </summary>
     private static void UseDarkScrollBars(Control control)
     {
-        if (!control.IsHandleCreated)
-        {
-            // Docked children inside a SplitContainer often get their handle only when the form is shown,
-            // and a theme set on a missing handle is silently lost.
-            control.HandleCreated -= OnHandleCreatedForTheme;
-            control.HandleCreated += OnHandleCreatedForTheme;
-            return;
-        }
+        // The subscription stays in place for the life of the control, not just until the first handle:
+        // a window theme lives on the handle, so any later recreation (a DPI change, a control that rebuilds
+        // itself) puts the light bars back. Re-arming on every call keeps exactly one handler attached.
+        control.HandleCreated -= OnHandleCreatedForTheme;
+        control.HandleCreated += OnHandleCreatedForTheme;
 
+        // Docked children inside a SplitContainer often get their handle only when the form is shown,
+        // and a theme set on a missing handle is silently lost.
+        if (!control.IsHandleCreated) return;
+
+        ApplyScrollBarTheme(control);
+    }
+
+    private static void OnHandleCreatedForTheme(object? sender, EventArgs e)
+    {
+        if (sender is not Control control) return;
+
+        ApplyScrollBarTheme(control);
+
+        // The window theme repaints the scroll bars but not the surface around them.
+        control.Invalidate();
+    }
+
+    private static void ApplyScrollBarTheme(Control control)
+    {
         try
         {
             SetWindowTheme(control.Handle, IsDark ? "DarkMode_Explorer" : null, null);
@@ -500,16 +571,5 @@ internal static class Theme
         catch (EntryPointNotFoundException)
         {
         }
-    }
-
-    private static void OnHandleCreatedForTheme(object? sender, EventArgs e)
-    {
-        if (sender is not Control control) return;
-
-        control.HandleCreated -= OnHandleCreatedForTheme;
-        UseDarkScrollBars(control);
-
-        // The window theme repaints the scroll bars but not the surface around them.
-        control.Invalidate();
     }
 }

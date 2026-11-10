@@ -2,7 +2,7 @@
 
 [English](#english) · [中文](#中文)
 
-![version](https://img.shields.io/badge/version-1.7.2-informational)
+![version](https://img.shields.io/badge/version-1.7.3-informational)
 
 ![game](https://img.shields.io/badge/The%20Long%20Dark-2.55-success)
 

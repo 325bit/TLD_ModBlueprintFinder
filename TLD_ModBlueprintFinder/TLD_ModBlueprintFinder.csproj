@@ -9,7 +9,7 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>TLD_ModBlueprintFinder</RootNamespace>
     <AssemblyName>TLD_ModBlueprintFinder</AssemblyName>
-    <Version>1.7.2</Version>
+    <Version>1.7.3</Version>
     <Product>TLD Mod Blueprint Finder</Product>
     <Description>《漫漫长夜》Mod 配方检索工具：输入物品 ID，按蓝图 / 食谱分别列出产物、原料，并单列工具；同时列出游戏原版配方（内置快照，只读），贴出该物品在 auto-mapped 里的 JSON 定义，并支持备份、就地修改，以及按 modcomponent 增删改查其中的 JSON 文件</Description>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
