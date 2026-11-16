@@ -62,7 +62,7 @@ TLD_ModBlueprintFinder/                 repository root
     ├── Indexing/BlueprintSearchEngine.cs  five groups, dedup, SearchRow
     ├── Indexing/ItemDefinitionIndex.cs IDetailRow + ID inference from file names
     ├── Export/CsvExporter.cs           UTF-8 CSV with BOM
-    ├── Editing/ModBackup.cs            whole-container copies into TLDMBF_modcomponent_backup\
+    ├── Editing/ModBackup.cs            whole-container copies + one-per-container baseline record
     ├── Editing/ModComponentArchive.cs  entry CRUD (ZIP rewrite core + folder branch)
     └── Ui/                             MainForm.Ui.cs (controls), MainForm.cs (logic),
                                         ContainerEditorForm.cs, Theme.cs (palettes, §8.1),
@@ -269,7 +269,8 @@ game folder is the file system:
 | read | `<path>\Mods\**\*.modcomponent`, `*.zip`, extracted mod folders | scan, and every read in the container editor |
 | read | the `vanilla.zip` embedded in the exe | once per process, on the first scan |
 | write | `<program dir>\TLD_ModBlueprintFinder_settings.json` | after a scan / on close; failures are swallowed |
-| write | `<program dir>\TLDMBF_modcomponent_backup\<mod>.modcomponent-<stamp>` | "Back up", or "Save changes" with auto-backup on |
+| write | `<program dir>\TLDMBF_modcomponent_backup\<mod>.modcomponent-<stamp>` | "Back up" on every click; with auto-backup on, only before a container's first change |
+| write | `<program dir>\TLDMBF_modcomponent_backup\_backup_state.json` | baseline bookkeeping: once on the first change, then after every successful write |
 | write | the `.modcomponent` the user edited | only on an explicit "Save changes" / editor action |
 
 The vanilla snapshot is read from the assembly, never from the game folder: a player can point the tool at any
@@ -349,15 +350,41 @@ referenced by a rosehip jam recipe). Stripped of the prefix both are `sugara`. T
 
 ```
 <program dir>\TLDMBF_modcomponent_backup\<mod>.modcomponent-<yyyyMMdd_HHmmss>
+<program dir>\TLDMBF_modcomponent_backup\_backup_state.json
 ```
 
-- A stamp suffix rather than a folder per run: successive backups of one mod sit next to each other in
-  Explorer and the number of edits is visible at a glance.
-- A second backup in the same second gets `-2`, `-3`; an existing backup is never overwritten.
-- An extracted-folder mod is backed up as a directory tree, same naming rule.
-- Sources that are not `.modcomponent` (a few mods ship `.zip`) keep their extension, so the format stays
-  obvious.
+Two operations share this folder and are deliberately different:
+
+| Operation | Copies | Trigger |
+| --- | --- | --- |
+| "Back up" button | one copy of the current state, every click | manual, in both windows |
+| "Auto-backup" checkbox (on) | **one copy of the untouched container**, once per container | before its first write through this tool |
+
+Copying the whole container on every save duplicated tens of MB per edited JSON; the backup folder grew
+faster than the mod it protected. `ModBackup.EnsureOriginal` now returns the baseline path (new or already
+present) instead of copying again, and `NoteWritten` is called after every successful write. Both editors
+call them, so a baseline made in the container editor is reused by the main window and vice versa.
+
+The state file holds one entry per container full path: the baseline file name and a fingerprint of the
+container (SHA-256 of the file, or of the sorted `path|size|mtime` list for an extracted-folder mod). A write
+is accepted as "still our own edit chain" only while the fingerprint matches; an external mod update, a
+restore from a backup, or another program editing the file changes it and the next write takes a fresh
+baseline. Deleting the baseline copy has the same effect. With auto-backup off, no baseline is recorded, so
+switching it on later copies whatever the container holds at that moment.
+
+The fingerprint costs one extra read of the container per write, negligible next to the ZIP rewrite (§7.2).
+
+On upgrade from the old behaviour, a container with no state entry adopts the **oldest** existing backup
+matching its name instead of adding a copy - that oldest one is the untouched original. A later external
+replacement does not adopt: it needs a copy of the new version. Corrupt or unwritable state degrades to a
+fresh baseline, never to a blocked write.
+
+- A stamp suffix rather than a folder per run; a second backup in the same second gets `-2`, `-3`, and an
+  existing backup is never overwritten.
+- An extracted-folder mod is backed up as a directory tree, same naming rule. Sources that are not
+  `.modcomponent` (a few mods ship `.zip`) keep their extension, so the format stays obvious.
 - A backup is a byte copy; restoring means renaming it back to `xxx.modcomponent` and dropping it into `Mods`.
+  `_backup_state.json` is bookkeeping, never a restorable container.
 
 ### 7.2 Why the whole archive is rewritten
 
@@ -421,7 +448,7 @@ edited the moment they load. Both editors therefore set `_original` / `EditSessi
 | `MergeDuplicates` | `true` | merge same-named blueprints across mods |
 | `IncludeSubFolders` | `true` | also look for containers in subfolders of `Mods` |
 | `MatchModeIndex` | `0` | combo-box index: 0 auto, 1 exact, 2 fuzzy |
-| `AutoBackup` | `true` | back up before every write |
+| `AutoBackup` | `true` | keep one untouched-original copy per container, taken before its first write |
 | `DarkMode` | `false` | dark colour scheme; same as the night-mode checkbox in the path row |
 
 A failed save is swallowed on purpose: a tool that forgets the path is less annoying than a modal dialog on
@@ -573,6 +600,9 @@ The console code page can be GBK, and a WinExe has no console handle at all, whi
 | 19 | The strip and page frame are repainted after `WM_PAINT`, before any layout change is considered | a light frame stays around the results in the dark scheme, which is the one thing the night mode is for | §8.1 |
 | 20 | Overpaint returns before painting when the scheme is light | the light look stops being the original look | §8.1 |
 | 21 | A window theme is re-applied on every `HandleCreated` and the subscription is never removed | a recreated handle silently brings back a light scroll bar for the rest of the session | §8.1 |
+| 22 | Auto-backup copies only the untouched container, once per container; manual "Back up" still copies on every click | every save of a large modcomponent adds another full copy, and the backup folder outgrows the mod | §7.1 |
+| 23 | `NoteWritten` records the post-write fingerprint after every successful write | the next save looks like an external replacement and silently creates an intermediate "original" | §7.1 |
+| 24 | A changed fingerprint or a missing baseline always creates a new copy; only an unseen container may adopt an old backup | a new mod version is edited with no pristine backup, or a restore is mistaken for our own edit | §7.1 |
 
 ## 11. Comment migration map
 
@@ -662,6 +692,7 @@ What has actually been checked, and how far:
 | Colour schemes | GUI probe: ticking the night-mode checkbox repaints the main window and writes `"DarkMode": true`; a relaunch comes up dark (title bar attribute reads 1); unticking restores light, and the result diffs against a fresh light start in text antialiasing only - no control keeps a dark colour. Container editor captured in dark: list header, editor pane and buttons all follow |
 | Write path | Console stub over real container copies: 38 cases (create / update / rename / delete / binary / path validation / folder containers) |
 | Container editor | End-to-end in a sandbox copy: create -> edit -> rename -> delete, archive re-read and `testzip()` after each step |
+| Backup baseline | Console stub over `ModBackup.cs`: 26 checks - one copy on the first change, none on five later saves, a fresh copy after an external replacement or a deleted baseline, oldest old-format backup adopted on upgrade, folder containers; two more checks in a second process confirm the state survives a restart. GUI click-through not repeated |
 | Single-file publish | CLI and GUI smoke test from `dist\`, including the embedded vanilla zip |
 
 Baseline queries (expected output with the 45-container corpus plus the 2.55 snapshot):

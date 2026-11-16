@@ -26,7 +26,7 @@ made, what consumes it, and what its own JSON looks like - without unpacking a s
 - Tools are listed apart from ingredients: a hammer you have to carry is not a hammer you burn.
 - The definition tab pastes the item's own JSON from `auto-mapped/`, so you can copy a working component  
   block into your own mod instead of digging through the container.
-- Anything you find can be edited in place and written back, with a backup taken first.
+- Anything you find can be edited in place and written back; one backup of the untouched container is kept before its first change.
 - A partial ID is enough: typing `Acorn` finds `GEAR_AcornShelled`, and widened matches are marked so you can  
   tell them from real ones.
 - **The game's own recipes are included**: mod results come first, vanilla ones underneath and read-only. They  
@@ -84,12 +84,17 @@ Select any row and the second button strip in the detail panel becomes active:
 | 保存修改             | validates the JSON, then writes it into the modcomponent; a parse failure asks before forcing |
 | 容器编辑器…           | opens the whole modcomponent to add, rename, delete or edit any JSON inside                   |
 | 备份该 modcomponent | copies the current row's modcomponent without changing anything                               |
-| 自动备份             | when ticked, every write is preceded by a backup (ticked by default, the state is remembered) |
+| 自动备份             | when ticked, keeps one copy of the untouched original; later saves add none (on by default, remembered) |
 
-Backups go to `TLDMBF_modcomponent_backup\` next to the exe as `<mod>.modcomponent-<date_time>`, so repeated  
-edits never overwrite each other; restoring means renaming one back to `xxx.modcomponent` and dropping it into  
-`Mods`. A write rewrites the whole container and swaps it in, so a failure cannot damage the original - but  
-**close the game first**: the file is locked while it runs. Restart afterwards so the modcomponent reloads.
+Backups go to `TLDMBF_modcomponent_backup\` next to the exe as `<mod>.modcomponent-<date_time>`. Auto-backup  
+keeps **one copy of the untouched container**, taken before its first change; every later save, create, rename  
+or delete reuses it, so a large modcomponent is not duplicated once per JSON edit. The baseline is recorded in  
+`_backup_state.json` in the same folder. Delete that copy, or install a new mod version, and the next write  
+takes a fresh one. `备份该 modcomponent` copies the current state on every click.
+
+Restoring means renaming a copy back to `xxx.modcomponent` and dropping it into `Mods`. A write rewrites the  
+whole container and swaps it in, so a failure cannot damage the original - but **close the game first**: the  
+file is locked while it runs. Restart afterwards so the modcomponent reloads.
 
 For anything beyond one row, `容器编辑器…` opens the container itself: filter the file list, edit on the right  
 (`保存修改` / `Ctrl+S` writes, `还原` reloads), `新建 JSON` inserts a working skeleton for the folder, and  
@@ -120,7 +125,7 @@ under `bundle/` are binary and stay read-only.
     <td align="center"><img src="docs/img/screenshot-editor.png" alt="container editor"></td>  
   </tr>  
   <tr>  
-    <td align="center"><code>"编辑 JSON"</code> then <code>"保存修改"</code>; auto-backup leaves a copy first</td>  
+    <td align="center"><code>"编辑 JSON"</code> then <code>"保存修改"</code>; auto-backup keeps one original copy</td>  
     <td align="center">Container editor: create / rename / delete / edit any file inside</td>  
   </tr>  
 </table>
@@ -141,7 +146,7 @@ Released under the [MIT License](LICENSE).
   作为原料（食谱）/ 物品定义**。
 - 工具单独一页，不混进原料：要带在身上的锤子，不是要被烧掉的锤子。
 - 物品定义页直接贴出 `auto-mapped/` 里这个物品自己的 JSON，改自己的 mod 时照抄即可。
-- 查到的东西可以就地改、写回 modcomponent，写之前先备份。
+- 查到的东西可以就地改、写回 modcomponent；第一次改动前留一份完全没改过的原始版本。
 - 只输一部分就能查：`Acorn` 也能找到 `GEAR_AcornShelled`，凑出来的结果会另外标出来，不会跟精确命中混淆。
 - **游戏原版配方一并列出**：每一页 mod 的行在前、原版的行在后，原版只读；数据内置在 exe 里，`Mods` 空了也查得到。
 - **夜间模式**：勾选后整个界面转深色（含标题栏），选择会被记住，下次启动照旧。
@@ -197,11 +202,15 @@ Released under the [MIT License](LICENSE).
 | 保存修改             | 校验 JSON 后写回 modcomponent；解析不过会先问你要不要硬存     |
 | 容器编辑器…           | 进到这个 modcomponent 里面，对全部 JSON 做增删改查        |
 | 备份该 modcomponent | 只备份当前行所属的 modcomponent，不做任何修改              |
-| 自动备份             | 勾选时每次写入前都先备份一份（默认勾选，状态会记住）                 |
+| 自动备份             | 勾选时只留一份完全没改过的原始版本，之后保存多少次都不再备份（默认勾选，状态会记住） |
 
-备份放在 exe 同目录的 `TLDMBF_modcomponent_backup\`，文件名是 `<mod名>.modcomponent-<年月日_时分秒>`，改多少次  
-都不会互相覆盖；还原时把它改回 `xxx.modcomponent` 丢回 `Mods` 即可。写入是把整个容器重写一遍再替换，中途  
-失败原包不会被动过——但还是**建议先关掉游戏**：游戏占着文件时写不进去，改完也要重启游戏才会重新加载。
+备份放在 exe 同目录的 `TLDMBF_modcomponent_backup\`，文件名是 `<mod名>.modcomponent-<年月日_时分秒>`。自动备份  
+只在这个容器**第一次被改动前**留一份完全没改过的版本，之后保存 / 新建 / 重命名 / 删除多少次都复用这一份，大型  
+modcomponent 不会每改一个 JSON 就多占一份空间；基线记录在 `_backup_state.json`。删掉那份原始备份、或者换了新版  
+本的 mod，下一次写入会重新留一份。「备份该 modcomponent」按钮仍是每次点击都复制当前状态。
+
+还原时把备份改回 `xxx.modcomponent` 丢回 `Mods` 即可。写入是把整个容器重写一遍再替换，中途失败原包不会被动过——  
+但还是**建议先关掉游戏**：游戏占着文件时写不进去，改完也要重启游戏才会重新加载。
 
 要改的不止一条时点「容器编辑器…」直接进容器：过滤文件列表、右侧改内容（`保存修改` / `Ctrl+S` 写回，  
 「还原」重新读），「新建 JSON」按目录给好骨架，「重命名」「删除」都要二次确认。新建时缺的上级目录会一并  
@@ -231,7 +240,7 @@ Released under the [MIT License](LICENSE).
     <td align="center"><img src="docs/img/screenshot-editor.png" alt="容器编辑器"></td>  
   </tr>  
   <tr>  
-    <td align="center">「编辑 JSON」改完点「保存修改」；勾了自动备份会先留一份</td>  
+    <td align="center">「编辑 JSON」改完点「保存修改」；自动备份只留一份原始版本</td>  
     <td align="center">容器编辑器：容器里的文件都能新建 / 重命名 / 删除 / 编辑</td>  
   </tr>  
 </table>

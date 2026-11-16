@@ -1038,16 +1038,15 @@ public sealed partial class MainForm : Form
 
         try
         {
-            if (_chkAutoBackup.Checked)
-                backupPath = ModBackup.Create(session.ContainerPath);
-
+            backupPath = ModBackup.EnsureOriginal(session.ContainerPath, _chkAutoBackup.Checked);
             ModComponentArchive.WriteText(session.ContainerPath, session.EntryPath, text);
+            ModBackup.NoteWritten(session.ContainerPath);
         }
         catch (Exception ex)
         {
             var extra = backupPath is null
                 ? ""
-                : $"\n\n原文件已经备份到：\n{backupPath}\n（写入没成功，原 modcomponent 未被改动）";
+                : $"\n\n原始版本备份在：\n{backupPath}\n（写入没成功，原 modcomponent 未被改动）";
 
             MessageBox.Show(this, "写入失败：\n\n" + ex.Message + extra, "保存修改失败",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -1061,7 +1060,7 @@ public sealed partial class MainForm : Form
 
         SetStatus(backupPath is null
                 ? $"已写入 {session.EntryPath}（未备份）。正在重新扫描…"
-                : $"已写入 {session.EntryPath}，备份：{Path.GetFileName(backupPath)}。正在重新扫描…",
+                : $"已写入 {session.EntryPath}，原始备份：{Path.GetFileName(backupPath)}。正在重新扫描…",
             StatusTone.Ok);
 
         // The index must be rebuilt after a write, or the UI shows "saved but nothing changed"
@@ -1249,7 +1248,7 @@ public sealed partial class MainForm : Form
         public bool MergeDuplicates { get; set; } = true;
         public int MatchModeIndex { get; set; }
 
-        /// <summary>Back up the original before "Save changes". On by default - the only operation that overwrites user files.</summary>
+        /// <summary>Keep one pristine copy per container, taken before its first change. On by default.</summary>
         public bool AutoBackup { get; set; } = true;
 
         /// <summary>Dark scheme. Remembered so the tool opens in whatever the user left it in.</summary>

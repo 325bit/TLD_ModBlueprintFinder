@@ -107,12 +107,14 @@ public sealed class ContainerEditorForm : Form
         _btnBackup.AutoSize = true;
         _btnBackup.Margin = new Padding(0, S(1), S(8), 0);
         _btnBackup.Click += OnBackupClick;
+        _tips.SetToolTip(_btnBackup, "手动备份：每次点击都复制一份当前状态，和自动备份留的原始版本互不干扰。");
 
         _chkAutoBackup.Text = "自动备份";
         _chkAutoBackup.AutoSize = true;
         _chkAutoBackup.Checked = _autoBackupDefault;
         _chkAutoBackup.Margin = new Padding(0, S(6), 0, 0);
-        _tips.SetToolTip(_chkAutoBackup, "勾选后，每次写入/删除前都会先把整个 modcomponent 备份一份。");
+        _tips.SetToolTip(_chkAutoBackup,
+            "勾选后，只在这个 modcomponent 第一次被改动前留一份原始版本；之后保存 / 新建 / 重命名 / 删除多少次都不再备份。");
 
         row1.Controls.Add(MakeLabel("容器"), 0, 0);
         row1.Controls.Add(_cmbContainer, 1, 0);
@@ -664,8 +666,9 @@ public sealed class ContainerEditorForm : Form
 
         try
         {
-            if (_chkAutoBackup.Checked) backup = ModBackup.Create(container.Path);
+            backup = ModBackup.EnsureOriginal(container.Path, _chkAutoBackup.Checked);
             ModComponentArchive.WriteText(container.Path, path, TemplateFor(path));
+            ModBackup.NoteWritten(container.Path);
         }
         catch (Exception ex)
         {
@@ -680,7 +683,7 @@ public sealed class ContainerEditorForm : Form
 
         RefreshList();
         SelectPath(path, reload: true);
-        SetStatus($"已新建 {path}" + (backup is null ? "" : $"，备份：{Path.GetFileName(backup)}"), StatusTone.Ok);
+        SetStatus($"已新建 {path}" + BackupNote(backup), StatusTone.Ok);
     }
 
     /// <summary>Default path for a new file: prefer a folder the container already has, not an invented structure.</summary>
@@ -796,8 +799,9 @@ public sealed class ContainerEditorForm : Form
 
         try
         {
-            if (_chkAutoBackup.Checked) backup = ModBackup.Create(container.Path);
+            backup = ModBackup.EnsureOriginal(container.Path, _chkAutoBackup.Checked);
             ModComponentArchive.WriteText(container.Path, path, text);
+            ModBackup.NoteWritten(container.Path);
         }
         catch (Exception ex)
         {
@@ -812,7 +816,7 @@ public sealed class ContainerEditorForm : Form
         SelectPath(path, reload: false);
         UpdateDirty();
 
-        SetStatus($"已写入 {path}" + (backup is null ? "" : $"，备份：{Path.GetFileName(backup)}"), StatusTone.Ok);
+        SetStatus($"已写入 {path}" + BackupNote(backup), StatusTone.Ok);
         return true;
     }
 
@@ -866,8 +870,9 @@ public sealed class ContainerEditorForm : Form
 
         try
         {
-            if (_chkAutoBackup.Checked) backup = ModBackup.Create(container.Path);
+            backup = ModBackup.EnsureOriginal(container.Path, _chkAutoBackup.Checked);
             ModComponentArchive.Rename(container.Path, oldPath, newPath);
+            ModBackup.NoteWritten(container.Path);
         }
         catch (Exception ex)
         {
@@ -895,7 +900,9 @@ public sealed class ContainerEditorForm : Form
         var confirm = MessageBox.Show(this,
             $"要从「{container.Name}」里删掉这个条目吗？\n\n{path}\n\n" +
             "删除会把整个 modcomponent 重写一遍，删掉的条目在游戏里就没了。" +
-            (_chkAutoBackup.Checked ? "\n（已勾选自动备份，删之前会先备份一份）" : "\n（没有勾选自动备份，删了就找不回来）"),
+            (_chkAutoBackup.Checked
+                ? "\n（已勾选自动备份，会保留这个容器的原始版本）"
+                : "\n（没有勾选自动备份，这次不会新建备份）"),
             "确认删除", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
             MessageBoxDefaultButton.Button2);
 
@@ -906,8 +913,9 @@ public sealed class ContainerEditorForm : Form
 
         try
         {
-            if (_chkAutoBackup.Checked) backup = ModBackup.Create(container.Path);
+            backup = ModBackup.EnsureOriginal(container.Path, _chkAutoBackup.Checked);
             ModComponentArchive.Delete(container.Path, path);
+            ModBackup.NoteWritten(container.Path);
         }
         catch (Exception ex)
         {
@@ -933,7 +941,7 @@ public sealed class ContainerEditorForm : Form
             ClearEditor();
         }
 
-        SetStatus($"已删除 {path}" + (backup is null ? "" : $"，备份：{Path.GetFileName(backup)}"), StatusTone.Ok);
+        SetStatus($"已删除 {path}" + BackupNote(backup), StatusTone.Ok);
     }
 
     // Backup / refresh
@@ -994,11 +1002,16 @@ public sealed class ContainerEditorForm : Form
         };
     }
 
+    /// <summary>Names the baseline copy without claiming a fresh copy was made on every save.</summary>
+    private static string BackupNote(string? baseline) => baseline is null
+        ? ""
+        : $"，原始备份：{Path.GetFileName(baseline)}";
+
     private void ShowWriteError(string title, Exception ex, string? backup)
     {
         var extra = backup is null
             ? ""
-            : $"\n\n原文件已经备份到：\n{backup}\n（写入没成功，原 modcomponent 未被改动）";
+            : $"\n\n原始版本备份在：\n{backup}\n（写入没成功，原 modcomponent 未被改动）";
 
         MessageBox.Show(this, $"{title}：\n\n{ex.Message}{extra}", title,
             MessageBoxButtons.OK, MessageBoxIcon.Error);

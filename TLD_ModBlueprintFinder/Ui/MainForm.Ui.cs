@@ -297,6 +297,7 @@ public sealed partial class MainForm
         _btnBackup.Margin = new Padding(0, S(2), S(6), 0);
         _btnBackup.Enabled = false;
         _btnBackup.Click += OnBackupClick;
+        _tips.SetToolTip(_btnBackup, "手动备份：每次点击都复制一份当前状态，和自动备份留的原始版本互不干扰。");
 
         _btnOpenEditor.Text = "容器编辑器…";
         _btnOpenEditor.AutoSize = true;
@@ -308,6 +309,8 @@ public sealed partial class MainForm
         _chkAutoBackup.Checked = true;
         _chkAutoBackup.AutoSize = true;
         _chkAutoBackup.Margin = new Padding(0, S(6), 0, 0);
+        _tips.SetToolTip(_chkAutoBackup,
+            "勾选后，只在这个 modcomponent 第一次被改动前留一份原始版本；之后保存多少次都不再备份。");
         _chkAutoBackup.CheckedChanged += OnAutoBackupChanged;
 
         editFlow.Controls.Add(_btnEdit);
